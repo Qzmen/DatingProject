@@ -1,44 +1,115 @@
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 
-# Кнопки для лайка/пропуска анкет
-def browse_keyboard(candidate_id: int) -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    builder.row(
-        InlineKeyboardButton(text="❤️ Лайк", callback_data=f"like:{candidate_id}"),
-        InlineKeyboardButton(text="➡️ Пропустить", callback_data=f"skip:{candidate_id}")
+MAIN_MENU_BROWSE = "🔎 Смотреть анкеты"
+MAIN_MENU_PROFILE = "👤 Моя анкета"
+MAIN_MENU_LIKES = "💌 Кто лайкнул"
+MAIN_MENU_MATCHES = "🤝 Взаимные лайки"
+MAIN_MENU_DISABLE = "⏸ Отключить анкету"
+MAIN_MENU_ENABLE = "▶️ Включить анкету"
+MAIN_MENU_HOME = "🏠 В меню"
+
+REG_GENDER_MALE = "👨 Мужчина"
+REG_GENDER_FEMALE = "👩 Женщина"
+REG_GENDER_OTHER = "✨ Другое"
+REG_SKIP_BIO = "⏭ Пропустить описание"
+REG_SKIP_PHOTO = "⏭ Пропустить фото"
+
+BROWSE_LIKE = "❤️ Лайк"
+BROWSE_SKIP = "➡️ Пропустить"
+BROWSE_BACK_MENU = MAIN_MENU_HOME
+
+MEETING_CONFIRM = "✅ Подтвердить партнёра"
+MEETING_REJECT = "❌ Не подходит"
+CALL_REQUEST = "📞 Запросить звонок"
+CALL_ACCEPT = "✅ Принять звонок"
+CALL_REJECT = "❌ Отклонить звонок"
+PRECHECK_YES = "🟢 Иду"
+PRECHECK_NO = "🔴 Не иду"
+ATTENDANCE_YES = "👍 Пришёл(ла)"
+ATTENDANCE_NO = "👎 Не пришёл(ла)"
+
+
+def main_menu_keyboard(profile_enabled: bool = True) -> ReplyKeyboardMarkup:
+    toggle_button = MAIN_MENU_DISABLE if profile_enabled else MAIN_MENU_ENABLE
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=MAIN_MENU_BROWSE), KeyboardButton(text=MAIN_MENU_PROFILE)],
+            [KeyboardButton(text=MAIN_MENU_LIKES), KeyboardButton(text=MAIN_MENU_MATCHES)],
+            [KeyboardButton(text=toggle_button)],
+        ],
+        resize_keyboard=True,
+        input_field_placeholder="Выбери действие в меню 👇",
     )
-    return builder.as_markup()
 
-# Кнопки для решения по встрече (подтвердить/отклонить)
-def meeting_decision_keyboard(match_id: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="✅ Подтвердить встречу", callback_data=f"confirm_meeting:{match_id}"),
-                InlineKeyboardButton(text="❌ Отклонить", callback_data=f"reject_meeting:{match_id}")
-            ]
-        ]
+
+def registration_gender_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=REG_GENDER_MALE), KeyboardButton(text=REG_GENDER_FEMALE)],
+            [KeyboardButton(text=REG_GENDER_OTHER), KeyboardButton(text=MAIN_MENU_HOME)],
+        ],
+        resize_keyboard=True,
+        input_field_placeholder="Выбери пол",
     )
 
-# Кнопки precheck "Иду / Не иду"
-def precheck_keyboard(match_id: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="👍 Да, иду", callback_data=f"precheck_yes:{match_id}"),
-                InlineKeyboardButton(text="👎 Нет", callback_data=f"precheck_no:{match_id}")
-            ]
-        ]
+
+def registration_bio_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=REG_SKIP_BIO), KeyboardButton(text=MAIN_MENU_HOME)]],
+        resize_keyboard=True,
+        input_field_placeholder="Добавь описание или пропусти",
     )
 
-# Кнопки посещения встречи
-def attendance_keyboard(match_id: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="👍 Да", callback_data=f"came_yes:{match_id}"),
-                InlineKeyboardButton(text="👎 Нет", callback_data=f"came_no:{match_id}")
-            ]
-        ]
+
+def registration_photo_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=REG_SKIP_PHOTO), KeyboardButton(text=MAIN_MENU_HOME)]],
+        resize_keyboard=True,
+        input_field_placeholder="Отправь фото или нажми кнопку",
+    )
+
+
+def browse_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=BROWSE_LIKE), KeyboardButton(text=BROWSE_SKIP)],
+            [KeyboardButton(text=BROWSE_BACK_MENU)],
+        ],
+        resize_keyboard=True,
+        input_field_placeholder="Лайкнуть или пропустить?",
+    )
+
+
+def meeting_decision_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=MEETING_CONFIRM), KeyboardButton(text=MEETING_REJECT)]],
+        resize_keyboard=True,
+    )
+
+
+def precheck_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=PRECHECK_YES), KeyboardButton(text=PRECHECK_NO)]],
+        resize_keyboard=True,
+    )
+
+
+def attendance_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=ATTENDANCE_YES), KeyboardButton(text=ATTENDANCE_NO)]],
+        resize_keyboard=True,
+    )
+
+
+def call_request_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=CALL_REQUEST)], [KeyboardButton(text=MAIN_MENU_HOME)]],
+        resize_keyboard=True,
+    )
+
+
+def call_response_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=CALL_ACCEPT), KeyboardButton(text=CALL_REJECT)]],
+        resize_keyboard=True,
     )

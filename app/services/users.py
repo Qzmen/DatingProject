@@ -11,9 +11,14 @@ class UserService:
     async def get_by_tg_id(self, tg_id: int) -> dict | None:
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
-            async with db.execute(
-                "SELECT * FROM users WHERE tg_id = ?", (tg_id,)
-            ) as cursor:
+            async with db.execute("SELECT * FROM users WHERE tg_id = ?", (tg_id,)) as cursor:
+                row = await cursor.fetchone()
+            return dict(row) if row else None
+
+    async def get_by_id(self, user_id: int) -> dict | None:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute("SELECT * FROM users WHERE id = ?", (user_id,)) as cursor:
                 row = await cursor.fetchone()
             return dict(row) if row else None
 
@@ -24,21 +29,23 @@ class UserService:
         age: int,
         gender: str,
         city: str,
+        bio: str,
         photo_file_id: str | None,
     ) -> None:
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute(
                 """
-                INSERT INTO users (tg_id, name, age, gender, city, photo_file_id, stars_balance)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO users (tg_id, name, age, gender, city, bio, photo_file_id, stars_balance)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(tg_id) DO UPDATE SET
                     name=excluded.name,
                     age=excluded.age,
                     gender=excluded.gender,
                     city=excluded.city,
+                    bio=excluded.bio,
                     photo_file_id=excluded.photo_file_id
                 """,
-                (tg_id, name, age, gender, city, photo_file_id, self.default_stars_balance),
+                (tg_id, name, age, gender, city, bio, photo_file_id, self.default_stars_balance),
             )
             await db.commit()
 
@@ -46,7 +53,7 @@ class UserService:
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(
-                "SELECT tg_id, name, age, gender, city, rating_score, rating_count, is_blocked "
+                "SELECT tg_id, name, age, gender, city, rating_score, rating_count, is_blocked, is_profile_enabled "
                 "FROM users ORDER BY id DESC LIMIT ?",
                 (limit,),
             ) as cursor:
@@ -55,8 +62,15 @@ class UserService:
 
     async def block_user(self, tg_id: int) -> bool:
         async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute("UPDATE users SET is_blocked = 1 WHERE tg_id = ?", (tg_id,))
+            await db.commit()
+            return cursor.rowcount > 0
+
+    async def set_profile_enabled(self, tg_id: int, enabled: bool) -> bool:
+        async with aiosqlite.connect(self.db_path) as db:
             cursor = await db.execute(
-                "UPDATE users SET is_blocked = 1 WHERE tg_id = ?", (tg_id,)
+                "UPDATE users SET is_profile_enabled = ? WHERE tg_id = ?",
+                (1 if enabled else 0, tg_id),
             )
             await db.commit()
             return cursor.rowcount > 0

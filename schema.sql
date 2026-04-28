@@ -5,11 +5,13 @@ CREATE TABLE IF NOT EXISTS users (
     age INTEGER NOT NULL,
     gender TEXT NOT NULL,
     city TEXT NOT NULL,
+    bio TEXT NOT NULL DEFAULT "",
     photo_file_id TEXT,
     stars_balance INTEGER NOT NULL DEFAULT 100,
     rating_score INTEGER NOT NULL DEFAULT 0,
     rating_count INTEGER NOT NULL DEFAULT 0,
     is_blocked INTEGER NOT NULL DEFAULT 0,
+    is_profile_enabled INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -38,7 +40,11 @@ CREATE TABLE IF NOT EXISTS matches (
     user1_precheck INTEGER,
     user2_precheck INTEGER,
     user1_feedback INTEGER,
-    user2_feedback INTEGER
+    user2_feedback INTEGER,
+    call_requested_by INTEGER,
+    user1_call_accepted INTEGER NOT NULL DEFAULT 0,
+    user2_call_accepted INTEGER NOT NULL DEFAULT 0,
+    call_room_url TEXT
 );
 
 CREATE TABLE IF NOT EXISTS feedback (

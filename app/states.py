@@ -6,4 +6,9 @@ class RegistrationStates(StatesGroup):
     waiting_age = State()
     waiting_gender = State()
     waiting_city = State()
+    waiting_bio = State()
     waiting_photo = State()
+
+
+class BrowsingStates(StatesGroup):
+    waiting_reaction = State()
