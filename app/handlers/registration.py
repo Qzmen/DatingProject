@@ -178,6 +178,12 @@ async def profile(message: Message) -> None:
         await message.answer_photo(me["photo_file_id"], caption=text)
     else:
         await message.answer(text)
+    if me.get("voice_file_id"):
+        await message.answer("🎤 Твоё голосовое приветствие")
+        await message.answer_voice(me["voice_file_id"])
+    if me.get("video_note_file_id"):
+        await message.answer("🎥 Твой кружок")
+        await message.answer_video_note(me["video_note_file_id"])
 
 
 async def _finish(message: Message, state: FSMContext, video_note_file_id: str | None) -> None:

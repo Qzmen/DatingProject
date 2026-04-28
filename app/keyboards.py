@@ -82,6 +82,11 @@ def game_invite_keyboard(match_id: int) -> InlineKeyboardMarkup:
 
 def game_round_keyboard(match_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="💬 Легко отвечаю", callback_data=f"quick_answer:{match_id}:easy"),
+            InlineKeyboardButton(text="😏 С подколом", callback_data=f"quick_answer:{match_id}:tease"),
+        ],
+        [InlineKeyboardButton(text="🫣 Неловко, но честно", callback_data=f"quick_answer:{match_id}:awkward")],
         [InlineKeyboardButton(text="🔥 Следующий раунд", callback_data=f"next_round:{match_id}")],
         [InlineKeyboardButton(text="🔓 Предложить раскрыть контакт", callback_data=f"reveal_contact:{match_id}")],
         [InlineKeyboardButton(text="❌ Завершить игру", callback_data=f"close_match:{match_id}")],

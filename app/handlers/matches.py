@@ -26,6 +26,41 @@ STATUS_RU = {
 }
 
 
+async def _finish_round_if_ready(bot, match_id: int, round_number: int) -> None:
+    answered = await bot.matching_service.round_answered_user_ids(match_id, round_number)
+    users = await bot.matching_service.users_for_match(match_id)
+    if not users:
+        return
+    user_ids = {users[0]["id"], users[1]["id"]}
+    if answered != user_ids:
+        return
+
+    answers = await bot.matching_service.get_round_answers(match_id, round_number)
+    for receiver in users:
+        for ans in answers:
+            if ans["sender_user_id"] == receiver["id"]:
+                continue
+            if ans["message_type"] == "voice":
+                await bot.send_message(receiver["tg_id"], "🎤 Голосовое от твоего матча")
+                await bot.send_voice(receiver["tg_id"], ans["file_id"])
+            elif ans["message_type"] == "video_note":
+                await bot.send_message(receiver["tg_id"], "🎥 Кружок от твоего матча")
+                await bot.send_video_note(receiver["tg_id"], ans["file_id"])
+            else:
+                await bot.send_message(receiver["tg_id"], f"💬 Ответ от твоего матча:\n{ans['text']}")
+        await bot.send_message(receiver["tg_id"], "Раунд завершён.", reply_markup=game_round_keyboard(match_id))
+
+    if round_number < 4:
+        nxt = await bot.matching_service.start_next_round(match_id)
+        if nxt:
+            for u in users:
+                await bot.send_message(
+                    u["tg_id"],
+                    f"🔥 Следующий раунд {nxt['round']}: {nxt['prompt']}",
+                    reply_markup=game_round_keyboard(match_id),
+                )
+
+
 @router.message(Command("matches"))
 @router.message(F.text == BTN_MATCHES)
 async def matches(message: Message) -> None:
@@ -87,7 +122,11 @@ async def accept_game(callback: CallbackQuery) -> None:
     match = await callback.bot.matching_service.get_match_for_user(match_id, (await callback.bot.matching_service.get_user_by_tg(callback.from_user.id))["id"])
     if users and match:
         for u in users:
-            await callback.bot.send_message(u["tg_id"], f"✅ Игра знакомства началась!\nРаунд 1: {match['game_prompt']}")
+            await callback.bot.send_message(
+                u["tg_id"],
+                f"✅ Игра знакомства началась!\nРаунд 1: {match['game_prompt']}",
+                reply_markup=game_round_keyboard(match_id),
+            )
 
 
 @router.callback_query(F.data.startswith("decline_game:"))
@@ -110,7 +149,10 @@ async def continue_game(callback: CallbackQuery) -> None:
     if not match:
         await callback.answer("Матч не найден")
         return
-    await callback.message.answer(f"Раунд {match['game_round']}: {match['game_prompt']}")
+    await callback.message.answer(
+        f"Раунд {match['game_round']}: {match['game_prompt']}",
+        reply_markup=game_round_keyboard(match_id),
+    )
 
 
 @router.message(Command("game"))
@@ -126,7 +168,10 @@ async def game_command(message: Message) -> None:
         await message.answer("Нет активной игры. Открой /matches")
         return
     match = await message.bot.matching_service.get_match_for_user(active["id"], me["id"])
-    await message.answer(f"Раунд {match['game_round']}: {match['game_prompt']}")
+    await message.answer(
+        f"Раунд {match['game_round']}: {match['game_prompt']}",
+        reply_markup=game_round_keyboard(active["id"]),
+    )
 
 
 @router.message(Command("stop_game"))
@@ -190,27 +235,36 @@ async def capture_round_answer(message: Message) -> None:
     if answered != user_ids:
         await message.answer("Ответ сохранён. Ждём ответ второго участника.")
         return
+    await _finish_round_if_ready(message.bot, active["id"], round_number)
 
-    answers = await message.bot.matching_service.get_round_answers(active["id"], round_number)
-    for receiver in users:
-        for ans in answers:
-            if ans["sender_user_id"] == receiver["id"]:
-                continue
-            if ans["message_type"] == "voice":
-                await message.bot.send_message(receiver["tg_id"], "🎤 Голосовое от твоего матча")
-                await message.bot.send_voice(receiver["tg_id"], ans["file_id"])
-            elif ans["message_type"] == "video_note":
-                await message.bot.send_message(receiver["tg_id"], "🎥 Кружок от твоего матча")
-                await message.bot.send_video_note(receiver["tg_id"], ans["file_id"])
-            else:
-                await message.bot.send_message(receiver["tg_id"], f"💬 Ответ от твоего матча:\n{ans['text']}")
-        await message.bot.send_message(receiver["tg_id"], "Раунд завершён.", reply_markup=game_round_keyboard(active["id"]))
 
-    if round_number < 4:
-        nxt = await message.bot.matching_service.start_next_round(active["id"])
-        if nxt:
-            for u in users:
-                await message.bot.send_message(u["tg_id"], f"🔥 Следующий раунд {nxt['round']}: {nxt['prompt']}")
+@router.callback_query(F.data.startswith("quick_answer:"))
+async def quick_answer(callback: CallbackQuery) -> None:
+    _, match_id_raw, tone = callback.data.split(":", 2)
+    match_id = int(match_id_raw)
+    me = await callback.bot.matching_service.get_user_by_tg(callback.from_user.id)
+    if not me:
+        await callback.answer("Сначала /start")
+        return
+    match = await callback.bot.matching_service.get_match_for_user(match_id, me["id"])
+    if not match or match["status"] != "game_active":
+        await callback.answer("Игра не активна", show_alert=True)
+        return
+
+    quick_text_map = {
+        "easy": "Легко отвечаю: мне с тобой уже комфортно 😊",
+        "tease": "С подколом: проверяю, насколько ты умеешь держать мой юмор 😏",
+        "awkward": "Неловко, но честно: ты мне интересен(на), хоть я и смущаюсь 🫣",
+    }
+    text = quick_text_map.get(tone)
+    if not text:
+        await callback.answer("Неизвестный формат ответа")
+        return
+    round_number = int(match.get("game_round") or 1)
+    prompt = match.get("game_prompt") or ""
+    await callback.bot.matching_service.save_round_answer(match_id, round_number, me["id"], "text", text, None, prompt)
+    await _finish_round_if_ready(callback.bot, match_id, round_number)
+    await callback.answer("Ответ отправлен ✅")
 
 
 @router.callback_query(F.data.startswith("reveal_contact:"))
