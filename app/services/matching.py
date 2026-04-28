@@ -35,11 +35,13 @@ class MatchingService:
                 WHERE u.id != ?
                   AND u.city = ?
                   AND u.is_blocked = 0
+                  AND u.is_profile_enabled = 1
                   AND u.id NOT IN (SELECT liked_id FROM likes WHERE liker_id = ?)
                   AND u.id NOT IN (
                     SELECT CASE WHEN m.user1_id = ? THEN m.user2_id ELSE m.user1_id END
                     FROM matches m
                     WHERE (m.user1_id = ? OR m.user2_id = ?)
+                      AND m.status IN ('pending_confirm', 'confirmed')
                   )
                 ORDER BY RANDOM()
                 LIMIT 1
@@ -113,6 +115,24 @@ class MatchingService:
                 "SELECT id, user1_id, user2_id, status, meetup_time, meetup_place "
                 "FROM matches ORDER BY id DESC LIMIT ?",
                 (limit,),
+            ) as cursor:
+                rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+    async def incoming_likes(self, user_id: int, limit: int = 20) -> list[dict]:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """
+                SELECT u.id, u.name, u.age, u.city, u.bio, u.rating_score, u.rating_count, l.created_at
+                FROM likes l
+                JOIN users u ON u.id = l.liker_id
+                WHERE l.liked_id = ?
+                  AND l.liker_id NOT IN (SELECT liked_id FROM likes WHERE liker_id = ?)
+                ORDER BY l.id DESC
+                LIMIT ?
+                """,
+                (user_id, user_id, limit),
             ) as cursor:
                 rows = await cursor.fetchall()
             return [dict(row) for row in rows]

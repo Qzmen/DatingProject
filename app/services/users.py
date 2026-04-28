@@ -53,7 +53,7 @@ class UserService:
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(
-                "SELECT tg_id, name, age, gender, city, rating_score, rating_count, is_blocked "
+                "SELECT tg_id, name, age, gender, city, rating_score, rating_count, is_blocked, is_profile_enabled "
                 "FROM users ORDER BY id DESC LIMIT ?",
                 (limit,),
             ) as cursor:
@@ -69,8 +69,8 @@ class UserService:
     async def set_profile_enabled(self, tg_id: int, enabled: bool) -> bool:
         async with aiosqlite.connect(self.db_path) as db:
             cursor = await db.execute(
-                "UPDATE users SET is_blocked = ? WHERE tg_id = ?",
-                (0 if enabled else 1, tg_id),
+                "UPDATE users SET is_profile_enabled = ? WHERE tg_id = ?",
+                (1 if enabled else 0, tg_id),
             )
             await db.commit()
             return cursor.rowcount > 0

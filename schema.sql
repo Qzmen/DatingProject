@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
     rating_score INTEGER NOT NULL DEFAULT 0,
     rating_count INTEGER NOT NULL DEFAULT 0,
     is_blocked INTEGER NOT NULL DEFAULT 0,
+    is_profile_enabled INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

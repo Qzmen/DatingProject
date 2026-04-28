@@ -29,6 +29,10 @@ async def browse(message: Message, state: FSMContext) -> None:
         return
 
     if me["is_blocked"]:
+        await message.answer("Твоя анкета заблокирована модератором.")
+        return
+
+    if me["is_profile_enabled"] == 0:
         await message.answer(
             "Анкета сейчас отключена. Включи её в меню и попробуй снова.",
             reply_markup=main_menu_keyboard(profile_enabled=False),
@@ -90,7 +94,7 @@ async def skip_candidate(message: Message, state: FSMContext) -> None:
 async def back_to_menu(message: Message, state: FSMContext) -> None:
     await state.clear()
     me = await message.bot.user_service.get_by_tg_id(message.from_user.id)
-    enabled = bool(me and me["is_blocked"] == 0)
+    enabled = bool(me and me.get("is_profile_enabled", 1) == 1)
     await message.answer("Возвращаю в меню 🏠", reply_markup=main_menu_keyboard(profile_enabled=enabled))
 
 
@@ -137,5 +141,8 @@ async def _notify_like_recipient(message: Message, liker: dict, liked_user_id: i
 
 def _format_reputation(score: int, count: int) -> str:
     if count == 0:
-        return "новичок"
-    return f"{score / count:+.2f} ({count})"
+        return "⭐ новичок"
+    value = (score / count + 5) / 2
+    value = max(0.0, min(5.0, value))
+    suffix = "оценка" if count == 1 else "оценок"
+    return f"⭐ {value:.1f} ({count} {suffix})"

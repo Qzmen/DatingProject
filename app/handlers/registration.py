@@ -8,6 +8,8 @@ from aiogram.types import Message
 from app.keyboards import (
     MAIN_MENU_DISABLE,
     MAIN_MENU_ENABLE,
+    MAIN_MENU_HOME,
+    MAIN_MENU_LIKES,
     MAIN_MENU_PROFILE,
     REG_GENDER_FEMALE,
     REG_GENDER_MALE,
@@ -135,8 +137,11 @@ async def show_profile(message: Message) -> None:
     if not me:
         await message.answer("Сначала заполни анкету через /start")
         return
+    if me["is_blocked"]:
+        await message.answer("Твоя анкета заблокирована модератором.")
+        return
 
-    status = "✅ включена" if me["is_blocked"] == 0 else "⏸ отключена"
+    status = "✅ включена" if me["is_profile_enabled"] == 1 else "⏸ отключена"
     bio = me.get("bio") or "—"
     reputation = _format_reputation(me["rating_score"], me["rating_count"])
     text = (
@@ -145,7 +150,7 @@ async def show_profile(message: Message) -> None:
         f"⭐ {me['stars_balance']} | Репутация: {reputation}\n"
         f"Статус анкеты: {status}"
     )
-    await message.answer(text, reply_markup=main_menu_keyboard(profile_enabled=me["is_blocked"] == 0))
+    await message.answer(text, reply_markup=main_menu_keyboard(profile_enabled=me["is_profile_enabled"] == 1))
 
 
 @router.message(F.text == MAIN_MENU_DISABLE)
@@ -164,6 +169,35 @@ async def enable_profile(message: Message) -> None:
         await message.answer("Сначала зарегистрируйся через /start")
         return
     await message.answer("Анкета снова активна ✅", reply_markup=main_menu_keyboard(profile_enabled=True))
+
+
+@router.message(F.text == MAIN_MENU_HOME)
+async def go_home(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    me = await message.bot.user_service.get_by_tg_id(message.from_user.id)
+    enabled = bool(me and me.get("is_profile_enabled", 1) == 1)
+    await message.answer("Главное меню", reply_markup=main_menu_keyboard(profile_enabled=enabled))
+
+
+@router.message(F.text == MAIN_MENU_LIKES)
+async def show_incoming_likes(message: Message) -> None:
+    me = await message.bot.user_service.get_by_tg_id(message.from_user.id)
+    if not me:
+        await message.answer("Сначала зарегистрируйся через /start")
+        return
+
+    likes = await message.bot.matching_service.incoming_likes(me["id"])
+    if not likes:
+        await message.answer("Пока входящих лайков нет 💌")
+        return
+
+    lines = ["💌 Кто лайкнул тебя:"]
+    for item in likes[:10]:
+        rep = _format_reputation(item["rating_score"], item["rating_count"])
+        bio = item.get("bio") or "без описания"
+        lines.append(f"• {item['name']}, {item['age']} ({item['city']}) — {rep}\n  {bio}")
+
+    await message.answer("\n".join(lines))
 
 
 async def _finish_registration(message: Message, state: FSMContext, photo_file_id: str | None) -> None:
@@ -186,5 +220,8 @@ async def _finish_registration(message: Message, state: FSMContext, photo_file_i
 
 def _format_reputation(score: int, count: int) -> str:
     if count == 0:
-        return "новичок"
-    return f"{score / count:+.2f} ({count})"
+        return "⭐ новичок"
+    value = (score / count + 5) / 2
+    value = max(0.0, min(5.0, value))
+    suffix = "оценка" if count == 1 else "оценок"
+    return f"⭐ {value:.1f} ({count} {suffix})"

@@ -21,7 +21,7 @@ async def admin_users(message: Message) -> None:
         await message.answer("Пользователей нет")
         return
     lines = [
-        f"{u['tg_id']} | {u['name']} | {u['age']} | {u['city']} | rating {u['rating_score']}/{u['rating_count']} | blocked={u['is_blocked']}"
+        f"{u['tg_id']} | {u['name']} | {u['age']} | {u['city']} | rating {u['rating_score']}/{u['rating_count']} | blocked={u['is_blocked']} | enabled={u['is_profile_enabled']}"
         for u in users
     ]
     await message.answer("\n".join(lines[:30]))

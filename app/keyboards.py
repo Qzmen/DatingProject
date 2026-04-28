@@ -2,8 +2,10 @@ from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 
 MAIN_MENU_BROWSE = "🔎 Смотреть анкеты"
 MAIN_MENU_PROFILE = "👤 Моя анкета"
+MAIN_MENU_LIKES = "💌 Кто лайкнул"
 MAIN_MENU_DISABLE = "⏸ Отключить анкету"
 MAIN_MENU_ENABLE = "▶️ Включить анкету"
+MAIN_MENU_HOME = "🏠 В меню"
 
 REG_GENDER_MALE = "👨 Мужчина"
 REG_GENDER_FEMALE = "👩 Женщина"
@@ -13,7 +15,7 @@ REG_SKIP_PHOTO = "⏭ Пропустить фото"
 
 BROWSE_LIKE = "❤️ Лайк"
 BROWSE_SKIP = "➡️ Пропустить"
-BROWSE_BACK_MENU = "🏠 В меню"
+BROWSE_BACK_MENU = MAIN_MENU_HOME
 
 MEETING_CONFIRM = "✅ Подтвердить встречу"
 MEETING_REJECT = "❌ Отменить встречу"
@@ -28,7 +30,7 @@ def main_menu_keyboard(profile_enabled: bool = True) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text=MAIN_MENU_BROWSE), KeyboardButton(text=MAIN_MENU_PROFILE)],
-            [KeyboardButton(text=toggle_button)],
+            [KeyboardButton(text=MAIN_MENU_LIKES), KeyboardButton(text=toggle_button)],
         ],
         resize_keyboard=True,
         input_field_placeholder="Выбери действие в меню 👇",
@@ -39,7 +41,7 @@ def registration_gender_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text=REG_GENDER_MALE), KeyboardButton(text=REG_GENDER_FEMALE)],
-            [KeyboardButton(text=REG_GENDER_OTHER)],
+            [KeyboardButton(text=REG_GENDER_OTHER), KeyboardButton(text=MAIN_MENU_HOME)],
         ],
         resize_keyboard=True,
         input_field_placeholder="Выбери пол",
@@ -48,7 +50,7 @@ def registration_gender_keyboard() -> ReplyKeyboardMarkup:
 
 def registration_bio_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=REG_SKIP_BIO)]],
+        keyboard=[[KeyboardButton(text=REG_SKIP_BIO), KeyboardButton(text=MAIN_MENU_HOME)]],
         resize_keyboard=True,
         input_field_placeholder="Добавь описание или пропусти",
     )
@@ -56,7 +58,7 @@ def registration_bio_keyboard() -> ReplyKeyboardMarkup:
 
 def registration_photo_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=REG_SKIP_PHOTO)]],
+        keyboard=[[KeyboardButton(text=REG_SKIP_PHOTO), KeyboardButton(text=MAIN_MENU_HOME)]],
         resize_keyboard=True,
         input_field_placeholder="Отправь фото или нажми кнопку",
     )
