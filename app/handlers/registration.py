@@ -5,6 +5,13 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
+from app.keyboards import (
+    BTN_PROFILE,
+    BTN_SKIP,
+    gender_keyboard,
+    main_menu_keyboard,
+    skip_keyboard,
+)
 from app.states import RegistrationStates
 
 router = Router()
@@ -14,10 +21,10 @@ router = Router()
 async def start_registration(message: Message, state: FSMContext) -> None:
     me = await message.bot.user_service.get_by_tg_id(message.from_user.id)
     if me:
-        await message.answer("Главное меню:\n/browse /matches /game /profile /stop_game")
+        await message.answer("Главное меню 💫", reply_markup=main_menu_keyboard())
         return
     await state.set_state(RegistrationStates.waiting_name)
-    await message.answer("Как тебя зовут?")
+    await message.answer("Привет! Давай создадим красивую анкету.\n\nКак тебя зовут?")
 
 
 @router.message(RegistrationStates.waiting_name)
@@ -39,12 +46,14 @@ async def save_age(message: Message, state: FSMContext) -> None:
         return
     await state.update_data(age=int(txt))
     await state.set_state(RegistrationStates.waiting_gender)
-    await message.answer("Укажи пол")
+    await message.answer("Укажи пол", reply_markup=gender_keyboard())
 
 
 @router.message(RegistrationStates.waiting_gender)
 async def save_gender(message: Message, state: FSMContext) -> None:
-    await state.update_data(gender=(message.text or "").strip() or "Не указан")
+    raw_gender = (message.text or "").strip()
+    gender_map = {"🙋‍♂️ Парень": "Парень", "🙋‍♀️ Девушка": "Девушка", "✨ Другое": "Другое"}
+    await state.update_data(gender=gender_map.get(raw_gender, raw_gender or "Не указан"))
     await state.set_state(RegistrationStates.waiting_city)
     await message.answer("Из какого ты города?")
 
@@ -68,33 +77,35 @@ async def save_bio(message: Message, state: FSMContext) -> None:
         return
     await state.update_data(description=bio)
     await state.set_state(RegistrationStates.waiting_photo)
-    await message.answer("Отправь фото или /skip_photo")
+    await message.answer("Отправь фото профиля или нажми «Пропустить».", reply_markup=skip_keyboard())
 
 
 @router.message(RegistrationStates.waiting_photo, Command("skip_photo"))
+@router.message(RegistrationStates.waiting_photo, F.text == BTN_SKIP)
 async def skip_photo(message: Message, state: FSMContext) -> None:
     await state.update_data(photo_file_id=None)
     await state.set_state(RegistrationStates.waiting_voice)
-    await message.answer("Отправь голосовое приветствие или /skip_voice")
+    await message.answer("Запиши голосовое приветствие (до 30 сек) или нажми «Пропустить».", reply_markup=skip_keyboard())
 
 
 @router.message(RegistrationStates.waiting_photo, F.photo)
 async def save_photo(message: Message, state: FSMContext) -> None:
     await state.update_data(photo_file_id=message.photo[-1].file_id)
     await state.set_state(RegistrationStates.waiting_voice)
-    await message.answer("Отправь голосовое приветствие или /skip_voice")
+    await message.answer("Отлично! Теперь голосовое приветствие (до 30 сек) или «Пропустить».", reply_markup=skip_keyboard())
 
 
 @router.message(RegistrationStates.waiting_photo)
 async def only_photo(message: Message) -> None:
-    await message.answer("Нужно фото или /skip_photo")
+    await message.answer("Отправь фото или нажми «Пропустить».")
 
 
 @router.message(RegistrationStates.waiting_voice, Command("skip_voice"))
+@router.message(RegistrationStates.waiting_voice, F.text == BTN_SKIP)
 async def skip_voice(message: Message, state: FSMContext) -> None:
     await state.update_data(voice_file_id=None)
     await state.set_state(RegistrationStates.waiting_video_note)
-    await message.answer("Отправь кружок Telegram или /skip_video_note")
+    await message.answer("Отправь кружок Telegram или нажми «Пропустить».", reply_markup=skip_keyboard())
 
 
 @router.message(RegistrationStates.waiting_voice, F.voice)
@@ -104,15 +115,16 @@ async def save_voice(message: Message, state: FSMContext) -> None:
         return
     await state.update_data(voice_file_id=message.voice.file_id)
     await state.set_state(RegistrationStates.waiting_video_note)
-    await message.answer("Отправь кружок Telegram или /skip_video_note")
+    await message.answer("Супер! Остался кружок Telegram или «Пропустить».", reply_markup=skip_keyboard())
 
 
 @router.message(RegistrationStates.waiting_voice)
 async def only_voice(message: Message) -> None:
-    await message.answer("Нужно голосовое или /skip_voice")
+    await message.answer("Отправь голосовое или нажми «Пропустить».")
 
 
 @router.message(RegistrationStates.waiting_video_note, Command("skip_video_note"))
+@router.message(RegistrationStates.waiting_video_note, F.text == BTN_SKIP)
 async def finish_skip_video(message: Message, state: FSMContext) -> None:
     await _finish(message, state, None)
 
@@ -124,15 +136,16 @@ async def save_video_note(message: Message, state: FSMContext) -> None:
 
 @router.message(RegistrationStates.waiting_video_note, F.video)
 async def reject_regular_video(message: Message) -> None:
-    await message.answer("Нужен именно кружок Telegram. Можно пропустить: /skip_video_note.")
+    await message.answer("Нужен именно кружок Telegram. Или нажми «Пропустить».")
 
 
 @router.message(RegistrationStates.waiting_video_note)
 async def only_video_note(message: Message) -> None:
-    await message.answer("Отправь кружок Telegram или /skip_video_note")
+    await message.answer("Отправь кружок Telegram или нажми «Пропустить».")
 
 
 @router.message(Command("profile"))
+@router.message(F.text == BTN_PROFILE)
 async def profile(message: Message) -> None:
     me = await message.bot.user_service.get_by_tg_id(message.from_user.id)
     if not me:
@@ -159,4 +172,7 @@ async def _finish(message: Message, state: FSMContext, video_note_file_id: str |
         video_note_file_id=video_note_file_id,
     )
     await state.clear()
-    await message.answer("✅ Регистрация завершена! Используй /browse /matches /game /profile")
+    await message.answer(
+        "✅ Регистрация завершена! Всё готово для знакомств.",
+        reply_markup=main_menu_keyboard(),
+    )

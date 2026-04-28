@@ -1,4 +1,16 @@
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+)
+
+BTN_BROWSE = "🔥 Смотреть анкеты"
+BTN_MATCHES = "💘 Мои матчи"
+BTN_GAME = "🎮 Активная игра"
+BTN_PROFILE = "👤 Мой профиль"
+BTN_STOP_GAME = "🛑 Завершить игру"
+BTN_SKIP = "Пропустить"
 
 
 def browse_keyboard(candidate_id: int) -> InlineKeyboardMarkup:
@@ -7,6 +19,37 @@ def browse_keyboard(candidate_id: int) -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="❤️ Лайк", callback_data=f"like:{candidate_id}"),
             InlineKeyboardButton(text="⏭ Пропустить", callback_data=f"skip:{candidate_id}"),
         ]]
+    )
+
+
+def main_menu_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=BTN_BROWSE), KeyboardButton(text=BTN_MATCHES)],
+            [KeyboardButton(text=BTN_GAME), KeyboardButton(text=BTN_PROFILE)],
+            [KeyboardButton(text=BTN_STOP_GAME)],
+        ],
+        resize_keyboard=True,
+        input_field_placeholder="Выбери действие 👇",
+    )
+
+
+def skip_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=BTN_SKIP)]],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+    )
+
+
+def gender_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="🙋‍♂️ Парень"), KeyboardButton(text="🙋‍♀️ Девушка")],
+            [KeyboardButton(text="✨ Другое")],
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True,
     )
 
 

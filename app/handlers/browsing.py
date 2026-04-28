@@ -2,12 +2,13 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
 
-from app.keyboards import browse_keyboard, incoming_like_keyboard
+from app.keyboards import BTN_BROWSE, browse_keyboard, incoming_like_keyboard
 
 router = Router()
 
 
 @router.message(Command("browse"))
+@router.message(F.text == BTN_BROWSE)
 async def browse(message: Message) -> None:
     me = await message.bot.matching_service.get_user_by_tg(message.from_user.id)
     if not me:

@@ -2,7 +2,17 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
 
-from app.keyboards import contact_reveal_keyboard, game_invite_keyboard, game_round_keyboard, match_keyboard, match_list_keyboard
+from app.keyboards import (
+    BTN_GAME,
+    BTN_MATCHES,
+    BTN_STOP_GAME,
+    contact_reveal_keyboard,
+    game_invite_keyboard,
+    game_round_keyboard,
+    main_menu_keyboard,
+    match_keyboard,
+    match_list_keyboard,
+)
 
 router = Router()
 
@@ -17,6 +27,7 @@ STATUS_RU = {
 
 
 @router.message(Command("matches"))
+@router.message(F.text == BTN_MATCHES)
 async def matches(message: Message) -> None:
     me = await message.bot.matching_service.get_user_by_tg(message.from_user.id)
     if not me:
@@ -102,6 +113,7 @@ async def continue_game(callback: CallbackQuery) -> None:
 
 
 @router.message(Command("game"))
+@router.message(F.text == BTN_GAME)
 async def game_command(message: Message) -> None:
     me = await message.bot.matching_service.get_user_by_tg(message.from_user.id)
     if not me:
@@ -117,6 +129,7 @@ async def game_command(message: Message) -> None:
 
 
 @router.message(Command("stop_game"))
+@router.message(F.text == BTN_STOP_GAME)
 async def stop_game(message: Message) -> None:
     me = await message.bot.matching_service.get_user_by_tg(message.from_user.id)
     if not me:
@@ -128,7 +141,7 @@ async def stop_game(message: Message) -> None:
         await message.answer("Активной игры нет.")
         return
     await message.bot.matching_service.close_match(active["id"])
-    await message.answer("Игра завершена.")
+    await message.answer("Игра завершена.", reply_markup=main_menu_keyboard())
 
 
 @router.message(F.voice | F.video_note | F.text)
