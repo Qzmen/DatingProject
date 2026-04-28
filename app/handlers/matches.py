@@ -76,7 +76,7 @@ async def _notify_match_users(bot, match_id: int, text: str) -> None:
 async def _show_matches_list(message: Message, user_id: int) -> None:
     rows = await message.bot.matching_service.list_matches_for_user(user_id)
     if not rows:
-        await message.answer("Матчей пока нет", reply_markup=main_menu_keyboard())
+        await message.answer("Пока нет матчей. Загляни в анкеты — новые люди могут появиться позже.", reply_markup=main_menu_keyboard())
         USER_SCREEN[message.from_user.id] = "menu"
         return
     prepared = []
@@ -105,9 +105,9 @@ async def _reply_keyboard_for_match_user(bot, match: dict, user_id: int):
 
 def _instruction_for_type(answer_type: str) -> str:
     return {
-        "text": "Отправь ответ текстом до 300 символов.",
-        "voice": "Отправь голосовое до 30 секунд.",
-        "video_note": "Отправь кружок Telegram.",
+        "text": "Отправь короткий текст до 300 символов.",
+        "voice": "Нужно отправить голосовое.",
+        "video_note": "Нужен именно кружок Telegram.",
         "photo": "В этом раунде нужно отправить фото. Можно выбрать фото из галереи телефона.",
         "choice": "Выбери вариант кнопкой ниже.",
         "any": "Можно ответить текстом, голосовым, кружком или фото.",
@@ -215,7 +215,7 @@ async def continue_game_text(message: Message) -> None:
     match_id = USER_CURRENT_MATCH.get(message.from_user.id)
     match = await message.bot.matching_service.get_match_for_user(match_id, me["id"]) if match_id else await message.bot.matching_service.get_active_game_for_user(me["id"])
     if not match or match["status"] != "game_active":
-        await message.answer("Нет активной игры.", reply_markup=main_menu_keyboard())
+        await message.answer("Сейчас нет активной игры знакомства.", reply_markup=main_menu_keyboard())
         return
     USER_CURRENT_MATCH[message.from_user.id] = int(match["id"])
     USER_SCREEN[message.from_user.id] = "game"
@@ -276,7 +276,7 @@ async def accept_reveal(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data.startswith("decline_reveal:"))
 async def decline_reveal(callback: CallbackQuery) -> None:
-    await callback.answer("Контакт не раскрыт.")
+    await callback.answer("Контакт не раскрыт. Можно продолжить игру.")
 
 
 @router.message(Command("stop_game"))
@@ -449,7 +449,10 @@ async def choice_answer(callback: CallbackQuery) -> None:
     if len(answered) < 2:
         await callback.message.answer("✅ Ответ сохранён. Ждём ответ второго участника.", reply_markup=waiting_partner_keyboard())
         return
-    answers = await callback.bot.matching_service.get_round_answers(match_id, int(match["game_round"]))
+    answers = await callback.bot.matching_service.get_undelivered_round_answers(match_id, int(match["game_round"]))
+    if not answers:
+        await callback.message.answer("Состояние уже изменилось. Обновил меню.", reply_markup=round_finished_keyboard())
+        return
     for receiver in users:
         for ans in answers:
             if ans["sender_user_id"] == receiver["id"]:
@@ -457,6 +460,7 @@ async def choice_answer(callback: CallbackQuery) -> None:
             label = "☑️ Выбор твоего матча" if ans["message_type"] == "choice" else "💬 Ответ от твоего матча"
             await callback.bot.send_message(receiver["tg_id"], f"{label}:\n{ans['text']}")
         await callback.bot.send_message(receiver["tg_id"], "✅ Вы оба ответили. Раунд завершён.", reply_markup=round_finished_keyboard())
+    await callback.bot.matching_service.mark_round_answers_delivered(match_id, int(match["game_round"]))
 
 
 @router.message(F.voice | F.video_note | F.text | F.photo | F.video)
@@ -551,7 +555,10 @@ async def capture_round_answer(message: Message) -> None:
             await message.bot.send_message(other["tg_id"], "👀 Твой матч уже ответил. Осталось ответить тебе.", reply_markup=waiting_answer_keyboard())
         return
 
-    answers = await message.bot.matching_service.get_round_answers(int(active["id"]), round_number)
+    answers = await message.bot.matching_service.get_undelivered_round_answers(int(active["id"]), round_number)
+    if not answers:
+        await message.answer("Состояние уже изменилось. Обновил меню.", reply_markup=round_finished_keyboard())
+        return
     for receiver in users:
         for ans in answers:
             if ans["sender_user_id"] == receiver["id"]:
@@ -569,3 +576,4 @@ async def capture_round_answer(message: Message) -> None:
             else:
                 await message.bot.send_message(receiver["tg_id"], f"💬 Ответ от твоего матча:\n{ans['text']}")
         await message.bot.send_message(receiver["tg_id"], "✅ Вы оба ответили. Раунд завершён.", reply_markup=round_finished_keyboard())
+    await message.bot.matching_service.mark_round_answers_delivered(int(active["id"]), round_number)

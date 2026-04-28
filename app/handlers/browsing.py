@@ -4,7 +4,7 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
 
-from app.keyboards import BTN_BROWSE, browse_keyboard, incoming_like_keyboard
+from app.keyboards import BTN_BACK, BTN_BROWSE, BTN_BROWSE_REFRESH, browse_empty_keyboard, browse_keyboard, incoming_like_keyboard, main_menu_keyboard, unregistered_keyboard
 from app.utils.city import normalize_city_for_search
 
 router = Router()
@@ -12,11 +12,12 @@ router = Router()
 
 @router.message(Command("browse"))
 @router.message(F.text == BTN_BROWSE)
+@router.message(F.text == BTN_BROWSE_REFRESH)
 async def browse(message: Message) -> None:
     await message.bot.user_service.touch_username(message.from_user.id, message.from_user.username)
     me = await message.bot.matching_service.get_user_by_tg(message.from_user.id)
     if not me:
-        await message.answer("Сначала /start")
+        await message.answer("Сначала заполни анкету.", reply_markup=unregistered_keyboard())
         return
     candidate = await message.bot.matching_service.next_candidate(
         me["id"],
@@ -24,7 +25,7 @@ async def browse(message: Message) -> None:
         bool(me.get("prefer_same_city", 1)),
     )
     if not candidate:
-        await message.answer("Пока нет новых анкет. Некоторые анкеты могут вернуться позже.")
+        await message.answer("Пока нет новых анкет. Некоторые анкеты могут вернуться позже.", reply_markup=browse_empty_keyboard())
         return
     await _send_candidate(message, candidate)
 
@@ -42,7 +43,7 @@ async def skip_candidate(callback: CallbackQuery) -> None:
         bool(me.get("prefer_same_city", 1)),
     )
     if not candidate:
-        await fake_message.answer("Пока нет новых анкет. Некоторые анкеты могут вернуться позже.")
+        await fake_message.answer("Пока нет новых анкет. Некоторые анкеты могут вернуться позже.", reply_markup=browse_empty_keyboard())
         return
     await _send_candidate(fake_message, candidate)
 
@@ -56,7 +57,7 @@ async def like_candidate(callback: CallbackQuery) -> None:
 
     with suppress(Exception):
         await callback.message.edit_reply_markup(reply_markup=None)
-    await callback.answer("Лайк отправлен" if new_like_created else "Лайк уже был отправлен")
+    await callback.answer("Лайк отправлен." if new_like_created else "Лайк уже был отправлен")
     if liked_user and new_like_created:
         await _send_incoming_like(callback.bot, me, liked_user)
 
@@ -66,7 +67,8 @@ async def like_candidate(callback: CallbackQuery) -> None:
             for u in users:
                 await callback.bot.send_message(
                     u["tg_id"],
-                    "🎉 У вас взаимная симпатия!\n🎲 Предложить игру знакомства через /matches",
+                    "🎉 У вас взаимная симпатия!",
+                    reply_markup=main_menu_keyboard(),
                 )
     candidate = await callback.bot.matching_service.next_candidate(
         me["id"],
@@ -74,7 +76,7 @@ async def like_candidate(callback: CallbackQuery) -> None:
         bool(me.get("prefer_same_city", 1)),
     )
     if not candidate:
-        await callback.message.answer("Пока нет новых анкет. Некоторые анкеты могут вернуться позже.")
+        await callback.message.answer("Пока нет новых анкет. Некоторые анкеты могут вернуться позже.", reply_markup=browse_empty_keyboard())
         return
     await _send_candidate(callback.message, candidate)
 
@@ -123,7 +125,7 @@ async def _send_candidate(message: Message, candidate: dict) -> None:
 
 
 async def _send_incoming_like(bot, liker: dict, liked_user: dict) -> None:
-    text = f"Тебя лайкнули ❤️\n{liker['name']} {liker['age']} ({liker['city']})\n{liker.get('description') or ''}\n⭐ Репутация: {liker.get('reputation_score', 0)}"
+    text = f"❤️ Тебя лайкнули!\n{liker['name']} {liker['age']} ({liker['city']})\n{liker.get('description') or ''}\n⭐ Репутация: {liker.get('reputation_score', 0)}"
     if liker.get("photo_file_id"):
         await bot.send_photo(liked_user["tg_id"], liker["photo_file_id"], caption=text, reply_markup=incoming_like_keyboard(liker["id"]))
     else:
@@ -132,3 +134,8 @@ async def _send_incoming_like(bot, liker: dict, liked_user: dict) -> None:
         await bot.send_voice(liked_user["tg_id"], liker["voice_file_id"])
     if liker.get("video_note_file_id"):
         await bot.send_video_note(liked_user["tg_id"], liker["video_note_file_id"])
+
+
+@router.message(F.text == BTN_BACK)
+async def back_from_browse(message: Message) -> None:
+    await message.answer("Главное меню", reply_markup=main_menu_keyboard())

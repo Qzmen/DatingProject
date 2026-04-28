@@ -86,25 +86,3 @@ CREATE TABLE IF NOT EXISTS pair_cooldowns (
 );
 
 CREATE INDEX IF NOT EXISTS idx_pair_cooldowns_expires_at ON pair_cooldowns(expires_at);
-
-CREATE TABLE IF NOT EXISTS monetization_plans (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    code TEXT NOT NULL UNIQUE,
-    title TEXT NOT NULL,
-    stars_amount INTEGER NOT NULL,
-    price_rub INTEGER NOT NULL,
-    is_active INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS payments (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    plan_code TEXT NOT NULL,
-    amount_rub INTEGER NOT NULL,
-    stars_amount INTEGER NOT NULL,
-    status TEXT NOT NULL DEFAULT 'pending',
-    provider TEXT NOT NULL DEFAULT 'stub',
-    external_payment_id TEXT,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);

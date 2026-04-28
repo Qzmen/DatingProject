@@ -7,7 +7,9 @@ BTN_SETTINGS = "⚙️ Настройки"
 BTN_BACK = "◀️ Назад"
 BTN_SKIP = "Пропустить"
 BTN_CITY_FILTER = "🌍 Фильтр по городу"
+BTN_START_REG = "Начать регистрацию"
 BTN_EDIT_PROFILE = "✏️ Редактировать анкету"
+BTN_DELETE_PROFILE_ELEMENT = "🗑 Удалить элемент"
 BTN_EDIT_NAME = "📝 Имя"
 BTN_EDIT_AGE = "🔢 Возраст"
 BTN_EDIT_CITY = "🏙 Город"
@@ -15,9 +17,14 @@ BTN_EDIT_BIO = "📖 Описание"
 BTN_EDIT_PHOTO = "🖼 Фото"
 BTN_EDIT_VOICE = "🎤 Голосовое"
 BTN_EDIT_VIDEO_NOTE = "🎥 Кружок"
+BTN_DELETE_BIO = "🗑 Удалить описание"
+BTN_DELETE_PHOTO = "🗑 Удалить фото"
+BTN_DELETE_VOICE = "🗑 Удалить голосовое"
+BTN_DELETE_VIDEO_NOTE = "🗑 Удалить кружок"
 
 BTN_END_GAME = "❌ Завершить игру"
 BTN_REFRESH = "🔄 Обновить статус"
+BTN_BROWSE_REFRESH = "🔄 Обновить"
 BTN_NEXT_ROUND = "🔥 Следующий раунд"
 BTN_REVEAL_CONTACT = "🔓 Раскрыть контакт"
 BTN_ADDITIONAL = "🎲 Дополнительно"
@@ -67,6 +74,14 @@ def game_waiting_partner_keyboard() -> ReplyKeyboardMarkup:
         keyboard=[[KeyboardButton(text=BTN_REFRESH), KeyboardButton(text=BTN_END_GAME)], [KeyboardButton(text=BTN_BACK)]],
         resize_keyboard=True,
         input_field_placeholder="Ждём ответ партнёра",
+    )
+
+
+def browse_empty_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=BTN_BROWSE_REFRESH)], [KeyboardButton(text=BTN_BACK)]],
+        resize_keyboard=True,
+        input_field_placeholder="Обновить подбор",
     )
 
 
@@ -160,7 +175,7 @@ def settings_keyboard(city_filter_enabled: bool) -> ReplyKeyboardMarkup:
 
 def profile_actions_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=BTN_EDIT_PROFILE)], [KeyboardButton(text=BTN_BACK)]],
+        keyboard=[[KeyboardButton(text=BTN_EDIT_PROFILE), KeyboardButton(text=BTN_DELETE_PROFILE_ELEMENT)], [KeyboardButton(text=BTN_BACK)]],
         resize_keyboard=True,
         input_field_placeholder="Анкета",
     )
@@ -180,8 +195,32 @@ def profile_edit_keyboard() -> ReplyKeyboardMarkup:
     )
 
 
+def profile_delete_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=BTN_DELETE_BIO), KeyboardButton(text=BTN_DELETE_PHOTO)],
+            [KeyboardButton(text=BTN_DELETE_VOICE), KeyboardButton(text=BTN_DELETE_VIDEO_NOTE)],
+            [KeyboardButton(text=BTN_BACK)],
+        ],
+        resize_keyboard=True,
+        input_field_placeholder="Что удалить?",
+    )
+
+
+def unregistered_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=BTN_START_REG)], [KeyboardButton(text=BTN_BACK)]],
+        resize_keyboard=True,
+        input_field_placeholder="Сначала регистрация",
+    )
+
+
 def skip_keyboard() -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text=BTN_SKIP)]], resize_keyboard=True, one_time_keyboard=True)
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=BTN_SKIP)], [KeyboardButton(text=BTN_BACK)]],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+    )
 
 
 def gender_keyboard() -> ReplyKeyboardMarkup:

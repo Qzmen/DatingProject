@@ -14,16 +14,24 @@ from app.keyboards import (
     BTN_EDIT_NAME,
     BTN_EDIT_PHOTO,
     BTN_EDIT_PROFILE,
+    BTN_DELETE_BIO,
+    BTN_DELETE_PHOTO,
+    BTN_DELETE_PROFILE_ELEMENT,
+    BTN_DELETE_VIDEO_NOTE,
+    BTN_DELETE_VOICE,
     BTN_EDIT_VIDEO_NOTE,
     BTN_EDIT_VOICE,
     BTN_PROFILE,
+    BTN_START_REG,
     BTN_SETTINGS,
     BTN_SKIP,
     gender_keyboard,
     main_menu_keyboard,
     profile_actions_keyboard,
+    profile_delete_keyboard,
     profile_edit_keyboard,
     settings_keyboard,
+    unregistered_keyboard,
     skip_keyboard,
 )
 from app.states import ProfileEditStates, RegistrationStates
@@ -53,7 +61,7 @@ async def start_registration(message: Message, state: FSMContext) -> None:
     me = await message.bot.user_service.get_by_tg_id(message.from_user.id)
     if me:
         await message.bot.user_service.touch_username(message.from_user.id, message.from_user.username)
-        await message.answer("Главное меню 💫", reply_markup=main_menu_keyboard())
+        await message.answer("Ты уже зарегистрирован.", reply_markup=main_menu_keyboard())
         return
     await state.set_state(RegistrationStates.waiting_name)
     await message.answer("Привет! Давай создадим красивую анкету.\n\nКак тебя зовут?")
@@ -76,8 +84,11 @@ async def save_name(message: Message, state: FSMContext) -> None:
 @router.message(RegistrationStates.waiting_age)
 async def save_age(message: Message, state: FSMContext) -> None:
     txt = (message.text or "").strip()
-    if not txt.isdigit() or int(txt) < 18 or int(txt) > 40:
+    if not txt.isdigit() or int(txt) < 18:
         await message.answer("Возраст должен быть не меньше 18 лет.")
+        return
+    if int(txt) > 40:
+        await message.answer("Не получилось сохранить возраст. Проверь число и попробуй ещё раз.")
         return
     await state.update_data(age=int(txt))
     await state.set_state(RegistrationStates.waiting_gender)
@@ -219,6 +230,55 @@ async def start_profile_edit(message: Message, state: FSMContext) -> None:
     await message.answer("Что именно изменить?", reply_markup=profile_edit_keyboard())
 
 
+@router.message(F.text == BTN_DELETE_PROFILE_ELEMENT)
+async def start_delete_profile_element(message: Message) -> None:
+    await message.answer("Что удалить из анкеты?", reply_markup=profile_delete_keyboard())
+
+
+@router.message(F.text == BTN_DELETE_BIO)
+async def delete_bio(message: Message) -> None:
+    me = await message.bot.user_service.get_by_tg_id(message.from_user.id)
+    if not me or not me.get("description"):
+        await message.answer("Этот элемент уже не добавлен.")
+        return
+    await message.bot.user_service.update_profile_fields(message.from_user.id, description="")
+    await message.answer("Описание удалено.")
+    await profile(message)
+
+
+@router.message(F.text == BTN_DELETE_PHOTO)
+async def delete_photo(message: Message) -> None:
+    me = await message.bot.user_service.get_by_tg_id(message.from_user.id)
+    if not me or not me.get("photo_file_id"):
+        await message.answer("Этот элемент уже не добавлен.")
+        return
+    await message.bot.user_service.update_profile_fields(message.from_user.id, photo_file_id=None)
+    await message.answer("Фото удалено.")
+    await profile(message)
+
+
+@router.message(F.text == BTN_DELETE_VOICE)
+async def delete_voice(message: Message) -> None:
+    me = await message.bot.user_service.get_by_tg_id(message.from_user.id)
+    if not me or not me.get("voice_file_id"):
+        await message.answer("Этот элемент уже не добавлен.")
+        return
+    await message.bot.user_service.update_profile_fields(message.from_user.id, voice_file_id=None)
+    await message.answer("Голосовое приветствие удалено.")
+    await profile(message)
+
+
+@router.message(F.text == BTN_DELETE_VIDEO_NOTE)
+async def delete_video_note(message: Message) -> None:
+    me = await message.bot.user_service.get_by_tg_id(message.from_user.id)
+    if not me or not me.get("video_note_file_id"):
+        await message.answer("Этот элемент уже не добавлен.")
+        return
+    await message.bot.user_service.update_profile_fields(message.from_user.id, video_note_file_id=None)
+    await message.answer("Кружок удалён.")
+    await profile(message)
+
+
 @router.message(F.text == BTN_EDIT_NAME)
 async def edit_name_start(message: Message, state: FSMContext) -> None:
     await state.set_state(ProfileEditStates.waiting_name)
@@ -292,7 +352,7 @@ async def edit_bio_save(message: Message, state: FSMContext) -> None:
 @router.message(F.text == BTN_EDIT_PHOTO)
 async def edit_photo_start(message: Message, state: FSMContext) -> None:
     await state.set_state(ProfileEditStates.waiting_photo)
-    await message.answer("Отправь новое фото профиля.")
+    await message.answer("Отправь новое фото из галереи или камеры.")
 
 
 @router.message(ProfileEditStates.waiting_photo, F.photo)
@@ -304,13 +364,13 @@ async def edit_photo_save(message: Message, state: FSMContext) -> None:
 
 @router.message(ProfileEditStates.waiting_photo)
 async def edit_photo_only(message: Message) -> None:
-    await message.answer("Нужно отправить именно фото.")
+    await message.answer("Нужно отправить именно фото. Можно выбрать его из галереи телефона.")
 
 
 @router.message(F.text == BTN_EDIT_VOICE)
 async def edit_voice_start(message: Message, state: FSMContext) -> None:
     await state.set_state(ProfileEditStates.waiting_voice)
-    await message.answer("Отправь новое голосовое приветствие (до 30 сек) или «Пропустить».", reply_markup=skip_keyboard())
+    await message.answer("Отправь голосовое приветствие до 30 секунд.", reply_markup=skip_keyboard())
 
 
 @router.message(ProfileEditStates.waiting_voice, F.text == BTN_SKIP)
@@ -333,7 +393,7 @@ async def edit_voice_save(message: Message, state: FSMContext) -> None:
 @router.message(F.text == BTN_EDIT_VIDEO_NOTE)
 async def edit_video_note_start(message: Message, state: FSMContext) -> None:
     await state.set_state(ProfileEditStates.waiting_video_note)
-    await message.answer("Отправь новый кружок или «Пропустить».", reply_markup=skip_keyboard())
+    await message.answer("Отправь кружок Telegram.", reply_markup=skip_keyboard())
 
 
 @router.message(ProfileEditStates.waiting_video_note, F.text == BTN_SKIP)
@@ -348,6 +408,11 @@ async def edit_video_note_save(message: Message, state: FSMContext) -> None:
     await message.bot.user_service.update_profile_fields(message.from_user.id, video_note_file_id=message.video_note.file_id)
     await state.clear()
     await message.answer("Кружок обновлён ✅", reply_markup=profile_edit_keyboard())
+
+
+@router.message(ProfileEditStates.waiting_video_note, F.video)
+async def edit_video_note_reject_video(message: Message) -> None:
+    await message.answer("Нужен именно кружок Telegram, не обычное видео.")
 
 
 @router.message(F.text == BTN_SETTINGS)
@@ -376,9 +441,42 @@ async def toggle_city_filter(message: Message) -> None:
 @router.message(F.text == BTN_BACK)
 async def back_from_profile_edit(message: Message, state: FSMContext) -> None:
     current = await state.get_state()
+    registration_back_map = {
+        RegistrationStates.waiting_age.state: RegistrationStates.waiting_name,
+        RegistrationStates.waiting_gender.state: RegistrationStates.waiting_age,
+        RegistrationStates.waiting_city.state: RegistrationStates.waiting_gender,
+        RegistrationStates.waiting_bio.state: RegistrationStates.waiting_city,
+        RegistrationStates.waiting_photo.state: RegistrationStates.waiting_bio,
+        RegistrationStates.waiting_voice.state: RegistrationStates.waiting_photo,
+        RegistrationStates.waiting_video_note.state: RegistrationStates.waiting_voice,
+    }
+    if current in registration_back_map:
+        await state.set_state(registration_back_map[current])
+        prompts = {
+            RegistrationStates.waiting_name.state: "Как тебя зовут?",
+            RegistrationStates.waiting_age.state: "Сколько тебе лет?",
+            RegistrationStates.waiting_gender.state: "Укажи пол",
+            RegistrationStates.waiting_city.state: "Из какого ты города?",
+            RegistrationStates.waiting_bio.state: "Расскажи немного о себе. (до 500 символов)",
+            RegistrationStates.waiting_photo.state: "Отправь фото профиля или нажми «Пропустить».",
+            RegistrationStates.waiting_voice.state: "Запиши голосовое приветствие (до 30 сек) или нажми «Пропустить».",
+        }
+        target = registration_back_map[current].state
+        keyboard = gender_keyboard() if target == RegistrationStates.waiting_gender.state else (skip_keyboard() if target in {RegistrationStates.waiting_photo.state, RegistrationStates.waiting_voice.state} else None)
+        await message.answer(prompts[target], reply_markup=keyboard)
+        return
     if current and current.startswith("ProfileEditStates:"):
         await state.clear()
     await message.answer("Главное меню", reply_markup=main_menu_keyboard())
+
+
+@router.message(F.text == BTN_START_REG)
+async def start_reg_button(message: Message, state: FSMContext) -> None:
+    me = await message.bot.user_service.get_by_tg_id(message.from_user.id)
+    if me:
+        await message.answer("Ты уже зарегистрирован.", reply_markup=main_menu_keyboard())
+        return
+    await start_registration(message, state)
 
 
 async def _finish(message: Message, state: FSMContext, video_note_file_id: str | None) -> None:

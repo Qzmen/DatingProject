@@ -391,6 +391,24 @@ class MatchingService:
                 rows = await c.fetchall()
             return [dict(r) for r in rows]
 
+    async def get_undelivered_round_answers(self, match_id: int, round_number: int) -> list[dict]:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM match_messages WHERE match_id=? AND round_number=? AND delivered_to_partner=0 ORDER BY id",
+                (match_id, round_number),
+            ) as c:
+                rows = await c.fetchall()
+            return [dict(r) for r in rows]
+
+    async def mark_round_answers_delivered(self, match_id: int, round_number: int) -> None:
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                "UPDATE match_messages SET delivered_to_partner=1 WHERE match_id=? AND round_number=?",
+                (match_id, round_number),
+            )
+            await db.commit()
+
     async def request_contact_reveal(self, match_id: int, user_id: int) -> bool:
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
