@@ -19,6 +19,9 @@ BROWSE_BACK_MENU = MAIN_MENU_HOME
 
 MEETING_CONFIRM = "✅ Подтвердить встречу"
 MEETING_REJECT = "❌ Отменить встречу"
+CALL_REQUEST = "📞 Запросить звонок"
+CALL_ACCEPT = "✅ Принять звонок"
+CALL_REJECT = "❌ Отклонить звонок"
 PRECHECK_YES = "🟢 Иду"
 PRECHECK_NO = "🔴 Не иду"
 ATTENDANCE_YES = "👍 Пришёл(ла)"
@@ -92,5 +95,19 @@ def precheck_keyboard() -> ReplyKeyboardMarkup:
 def attendance_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text=ATTENDANCE_YES), KeyboardButton(text=ATTENDANCE_NO)]],
+        resize_keyboard=True,
+    )
+
+
+def call_request_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=CALL_REQUEST)], [KeyboardButton(text=MAIN_MENU_HOME)]],
+        resize_keyboard=True,
+    )
+
+
+def call_response_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=CALL_ACCEPT), KeyboardButton(text=CALL_REJECT)]],
         resize_keyboard=True,
     )

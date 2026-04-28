@@ -150,7 +150,14 @@ async def show_profile(message: Message) -> None:
         f"⭐ {me['stars_balance']} | Репутация: {reputation}\n"
         f"Статус анкеты: {status}"
     )
-    await message.answer(text, reply_markup=main_menu_keyboard(profile_enabled=me["is_profile_enabled"] == 1))
+    if me.get("photo_file_id"):
+        await message.answer_photo(
+            me["photo_file_id"],
+            caption=text,
+            reply_markup=main_menu_keyboard(profile_enabled=me["is_profile_enabled"] == 1),
+        )
+    else:
+        await message.answer(text, reply_markup=main_menu_keyboard(profile_enabled=me["is_profile_enabled"] == 1))
 
 
 @router.message(F.text == MAIN_MENU_DISABLE)

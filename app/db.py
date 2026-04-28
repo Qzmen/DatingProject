@@ -43,7 +43,10 @@ CREATE TABLE IF NOT EXISTS matches (
     user1_precheck INTEGER,
     user2_precheck INTEGER,
     user1_feedback INTEGER,
-    user2_feedback INTEGER
+    user2_feedback INTEGER,
+    call_requested_by INTEGER,
+    user1_call_accepted INTEGER NOT NULL DEFAULT 0,
+    user2_call_accepted INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS feedback (
@@ -62,6 +65,7 @@ async def init_db(database_url: str) -> None:
     async with aiosqlite.connect(database_url) as db:
         await db.executescript(SCHEMA_SQL)
         await _ensure_user_columns(db)
+        await _ensure_match_columns(db)
         await db.commit()
 
 
@@ -73,3 +77,14 @@ async def _ensure_user_columns(db: aiosqlite.Connection) -> None:
 
     if "is_profile_enabled" not in cols:
         await db.execute("ALTER TABLE users ADD COLUMN is_profile_enabled INTEGER NOT NULL DEFAULT 1")
+
+
+async def _ensure_match_columns(db: aiosqlite.Connection) -> None:
+    async with db.execute("PRAGMA table_info(matches)") as cursor:
+        cols = {row[1] for row in await cursor.fetchall()}
+    if "call_requested_by" not in cols:
+        await db.execute("ALTER TABLE matches ADD COLUMN call_requested_by INTEGER")
+    if "user1_call_accepted" not in cols:
+        await db.execute("ALTER TABLE matches ADD COLUMN user1_call_accepted INTEGER NOT NULL DEFAULT 0")
+    if "user2_call_accepted" not in cols:
+        await db.execute("ALTER TABLE matches ADD COLUMN user2_call_accepted INTEGER NOT NULL DEFAULT 0")

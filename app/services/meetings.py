@@ -118,7 +118,7 @@ class MeetingService:
     async def pending_confirm_expired(self) -> list[int]:
         now = datetime.now(UTC).isoformat()
         async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute("SELECT id FROM matches WHERE status='pending_confirm' AND confirm_deadline < ?", (now,)) as cursor:
+            async with db.execute("SELECT id FROM matches WHERE status IN ('pending_call','pending_confirm') AND confirm_deadline < ?", (now,)) as cursor:
                 rows = await cursor.fetchall()
             ids = [row[0] for row in rows]
             for match_id in ids:
@@ -222,6 +222,73 @@ class MeetingService:
         await db.execute(
             "UPDATE users SET is_blocked = 1 WHERE rating_count >= 3 AND (CAST(rating_score AS REAL)/rating_count) <= -0.5"
         )
+
+
+    async def pending_call_match_for_user(self, user_id: int) -> dict | None:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            row = await self._fetchone(
+                db,
+                """
+                SELECT * FROM matches
+                WHERE status = 'pending_call'
+                  AND (user1_id = ? OR user2_id = ?)
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (user_id, user_id),
+            )
+            return dict(row) if row else None
+
+    async def request_call(self, match_id: int, user_id: int) -> tuple[bool, str]:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            match = await self._fetchone(db, "SELECT * FROM matches WHERE id = ?", (match_id,))
+            if not match or match["status"] != "pending_call":
+                return False, "Матч для звонка недоступен."
+            if user_id not in (match["user1_id"], match["user2_id"]):
+                return False, "Это не ваш матч."
+            await db.execute("UPDATE matches SET call_requested_by = ? WHERE id = ?", (user_id, match_id))
+            await db.commit()
+            return True, "Запрос на звонок отправлен."
+
+    async def respond_call(self, match_id: int, user_id: int, accepted: bool) -> tuple[bool, str]:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            match = await self._fetchone(db, "SELECT * FROM matches WHERE id = ?", (match_id,))
+            if not match or match["status"] != "pending_call":
+                return False, "Матч для звонка недоступен."
+            if user_id not in (match["user1_id"], match["user2_id"]):
+                return False, "Это не ваш матч."
+            if match["call_requested_by"] is None:
+                return False, "Сначала кто-то должен отправить запрос на звонок."
+
+            if not accepted:
+                await db.execute("UPDATE matches SET status = 'cancelled' WHERE id = ?", (match_id,))
+                await db.commit()
+                return True, "Звонок отклонён, матч отменён."
+
+            if user_id == match["user1_id"]:
+                await db.execute("UPDATE matches SET user1_call_accepted = 1 WHERE id = ?", (match_id,))
+            else:
+                await db.execute("UPDATE matches SET user2_call_accepted = 1 WHERE id = ?", (match_id,))
+
+            refreshed = await self._fetchone(
+                db,
+                "SELECT user1_call_accepted, user2_call_accepted FROM matches WHERE id = ?",
+                (match_id,),
+            )
+            if refreshed and refreshed["user1_call_accepted"] and refreshed["user2_call_accepted"]:
+                confirm_deadline = (datetime.now(UTC) + timedelta(hours=24)).isoformat()
+                await db.execute(
+                    "UPDATE matches SET status = 'pending_confirm', confirm_deadline = ? WHERE id = ?",
+                    (confirm_deadline, match_id),
+                )
+                await db.commit()
+                return True, "Звонок согласован. Теперь можно предложить встречу."
+
+            await db.commit()
+            return True, "Ожидаем подтверждение звонка от второго участника."
 
     async def pending_match_for_user(self, user_id: int) -> dict | None:
         async with aiosqlite.connect(self.db_path) as db:

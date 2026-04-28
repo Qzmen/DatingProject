@@ -4,7 +4,7 @@ import aiosqlite
 from datetime import datetime, timedelta, UTC
 
 
-ACTIVE_STATUSES = ("pending_confirm", "confirmed")
+ACTIVE_STATUSES = ("pending_call", "pending_confirm", "confirmed")
 
 
 class MatchingService:
@@ -17,13 +17,30 @@ class MatchingService:
                 """
                 SELECT id FROM matches
                 WHERE (user1_id = ? OR user2_id = ?)
-                  AND status IN ('pending_confirm', 'confirmed')
+                  AND status IN ('pending_call', 'pending_confirm', 'confirmed')
                 LIMIT 1
                 """,
                 (user_id, user_id),
             ) as cursor:
                 row = await cursor.fetchone()
             return row is not None
+
+
+    async def active_match_for_user(self, user_id: int) -> dict | None:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """
+                SELECT id, status FROM matches
+                WHERE (user1_id = ? OR user2_id = ?)
+                  AND status IN ('pending_call', 'pending_confirm', 'confirmed')
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (user_id, user_id),
+            ) as cursor:
+                row = await cursor.fetchone()
+            return dict(row) if row else None
 
     async def next_candidate(self, user_id: int, city: str) -> dict | None:
         async with aiosqlite.connect(self.db_path) as db:
@@ -41,7 +58,7 @@ class MatchingService:
                     SELECT CASE WHEN m.user1_id = ? THEN m.user2_id ELSE m.user1_id END
                     FROM matches m
                     WHERE (m.user1_id = ? OR m.user2_id = ?)
-                      AND m.status IN ('pending_confirm', 'confirmed')
+                      AND m.status IN ('pending_call', 'pending_confirm', 'confirmed')
                   )
                 ORDER BY RANDOM()
                 LIMIT 1
@@ -69,13 +86,13 @@ class MatchingService:
                 return None
 
             async with db.execute(
-                "SELECT id FROM matches WHERE (user1_id=? OR user2_id=?) AND status IN ('pending_confirm','confirmed')",
+                "SELECT id FROM matches WHERE (user1_id=? OR user2_id=?) AND status IN ('pending_call','pending_confirm','confirmed')",
                 (liker_id, liker_id),
             ) as cursor:
                 active_liker = await cursor.fetchone()
 
             async with db.execute(
-                "SELECT id FROM matches WHERE (user1_id=? OR user2_id=?) AND status IN ('pending_confirm','confirmed')",
+                "SELECT id FROM matches WHERE (user1_id=? OR user2_id=?) AND status IN ('pending_call','pending_confirm','confirmed')",
                 (liked_id, liked_id),
             ) as cursor:
                 active_liked = await cursor.fetchone()
@@ -92,7 +109,7 @@ class MatchingService:
             async with db.execute(
                 """
                 INSERT INTO matches(user1_id, user2_id, status, confirm_deadline, meetup_time, meetup_place)
-                VALUES (?, ?, 'pending_confirm', ?, ?, ?)
+                VALUES (?, ?, 'pending_call', ?, ?, ?)
                 """,
                 (liker_id, liked_id, confirm_deadline.isoformat(), meetup_time.isoformat(), meetup_place),
             ) as cursor:

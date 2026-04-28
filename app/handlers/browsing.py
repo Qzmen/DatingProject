@@ -10,6 +10,7 @@ from app.keyboards import (
     MAIN_MENU_BROWSE,
     browse_keyboard,
     main_menu_keyboard,
+    call_request_keyboard,
     meeting_decision_keyboard,
 )
 from app.states import BrowsingStates
@@ -39,11 +40,18 @@ async def browse(message: Message, state: FSMContext) -> None:
         )
         return
 
-    if await matching_service.has_active_meeting(me["id"]):
-        await message.answer(
-            "У тебя уже есть активная встреча. Подтверди или отмени её.",
-            reply_markup=meeting_decision_keyboard(),
-        )
+    active_match = await matching_service.active_match_for_user(me["id"])
+    if active_match:
+        if active_match["status"] == "pending_call":
+            await message.answer(
+                "У тебя уже есть взаимный лайк. Сначала пройдите этап звонка.",
+                reply_markup=call_request_keyboard(),
+            )
+        else:
+            await message.answer(
+                "У тебя уже есть активная встреча. Подтверди или отмени её.",
+                reply_markup=meeting_decision_keyboard(),
+            )
         return
 
     await _show_next_candidate(message, state, me["id"], me["city"])
@@ -77,8 +85,8 @@ async def like_candidate(message: Message, state: FSMContext) -> None:
 
     await message.answer(
         "🔥 Взаимный лайк!\n"
-        "Нужно подтвердить офлайн-встречу в течение 24 часов.",
-        reply_markup=meeting_decision_keyboard(),
+        "Сначала отправьте запрос на совместный звонок 📞",
+        reply_markup=call_request_keyboard(),
     )
     await _notify_like_recipient(message, me, candidate_id, is_match=True)
     await state.clear()

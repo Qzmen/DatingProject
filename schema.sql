@@ -40,7 +40,10 @@ CREATE TABLE IF NOT EXISTS matches (
     user1_precheck INTEGER,
     user2_precheck INTEGER,
     user1_feedback INTEGER,
-    user2_feedback INTEGER
+    user2_feedback INTEGER,
+    call_requested_by INTEGER,
+    user1_call_accepted INTEGER NOT NULL DEFAULT 0,
+    user2_call_accepted INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS feedback (
