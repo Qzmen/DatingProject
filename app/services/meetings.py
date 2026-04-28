@@ -445,18 +445,37 @@ class MeetingService:
 
     async def _create_yandex_telemost_conference(self, match_id: int) -> str | None:
         api_url = "https://cloud-api.yandex.net/v1/telemost-api/conferences"
-        payload = {"title": f"Dating call #{match_id}"}
+        payload: dict[str, str] = {}
         headers = {
             "Authorization": f"OAuth {self.yandex_telemost_oauth_token}",
             "Content-Type": "application/json",
+            "Accept": "application/json",
         }
         req = request.Request(api_url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
         try:
             with request.urlopen(req, timeout=15) as resp:  # noqa: S310
                 raw = resp.read().decode("utf-8")
             data = json.loads(raw) if raw else {}
+        except error.HTTPError as exc:
+            response_body = ""
+            if exc.fp:
+                try:
+                    response_body = exc.fp.read().decode("utf-8")
+                except Exception:  # noqa: BLE001
+                    response_body = "<failed to decode error body>"
+            logger.error(
+                "Failed to create Telemost conference. status=%s reason=%s body=%s",
+                exc.code,
+                exc.reason,
+                response_body,
+            )
+            if exc.code == 403:
+                logger.error(
+                    "Telemost API returned 403. Проверь OAuth-токен/права (YANDEX_TELEMOST_OAUTH_TOKEN)."
+                )
+            return None
         except (error.URLError, TimeoutError, json.JSONDecodeError) as exc:
-            logger.exception("Failed to create Telemost conference: %s", exc)
+            logger.error("Failed to create Telemost conference: %s", exc)
             return None
 
         for key in ("conference_url", "join_url", "url", "link"):
