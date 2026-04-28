@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import aiosqlite
 from datetime import UTC, datetime, timedelta
+
+import aiosqlite
 
 
 class MeetingService:
@@ -12,51 +13,53 @@ class MeetingService:
     async def get_match(self, match_id: int) -> dict | None:
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
-            row = await db.execute_fetchone("SELECT * FROM matches WHERE id = ?", (match_id,))
+            row = await self._fetchone(db, "SELECT * FROM matches WHERE id = ?", (match_id,))
             return dict(row) if row else None
 
     async def users_for_match(self, match_id: int) -> tuple[dict, dict] | None:
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
-            match = await db.execute_fetchone("SELECT user1_id, user2_id FROM matches WHERE id = ?", (match_id,))
+            match = await self._fetchone(db, "SELECT user1_id, user2_id FROM matches WHERE id = ?", (match_id,))
             if not match:
                 return None
-            user1 = await db.execute_fetchone("SELECT * FROM users WHERE id = ?", (match["user1_id"],))
-            user2 = await db.execute_fetchone("SELECT * FROM users WHERE id = ?", (match["user2_id"],))
+            user1 = await self._fetchone(db, "SELECT * FROM users WHERE id = ?", (match["user1_id"],))
+            user2 = await self._fetchone(db, "SELECT * FROM users WHERE id = ?", (match["user2_id"],))
+            if not user1 or not user2:
+                return None
             return dict(user1), dict(user2)
 
     async def confirm_meeting(self, match_id: int, user_id: int) -> tuple[bool, str]:
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
-            match = await db.execute_fetchone("SELECT * FROM matches WHERE id = ?", (match_id,))
+            match = await self._fetchone(db, "SELECT * FROM matches WHERE id = ?", (match_id,))
             if not match or match["status"] != "pending_confirm":
                 return False, "Матч уже недоступен."
 
             if user_id not in (match["user1_id"], match["user2_id"]):
                 return False, "Это не ваш матч."
 
-            user = await db.execute_fetchone("SELECT * FROM users WHERE id = ?", (user_id,))
-            if user["stars_balance"] < self.meeting_price_stars:
+            user = await self._fetchone(db, "SELECT * FROM users WHERE id = ?", (user_id,))
+            if not user or user["stars_balance"] < self.meeting_price_stars:
                 return False, "Недостаточно Telegram Stars (mock)."
 
             stars_column = "user1_stars_locked" if user_id == match["user1_id"] else "user2_stars_locked"
             confirmed_column = "user1_confirmed" if user_id == match["user1_id"] else "user2_confirmed"
 
-            await db.execute(f"UPDATE users SET stars_balance = stars_balance - ? WHERE id = ?", (self.meeting_price_stars, user_id))
+            await db.execute("UPDATE users SET stars_balance = stars_balance - ? WHERE id = ?", (self.meeting_price_stars, user_id))
             await db.execute(
                 f"UPDATE matches SET {confirmed_column} = 1, {stars_column} = ? WHERE id = ?",
                 (self.meeting_price_stars, match_id),
             )
 
-            refreshed = await db.execute_fetchone("SELECT user1_confirmed, user2_confirmed FROM matches WHERE id = ?", (match_id,))
-            if refreshed["user1_confirmed"] and refreshed["user2_confirmed"]:
+            refreshed = await self._fetchone(db, "SELECT user1_confirmed, user2_confirmed FROM matches WHERE id = ?", (match_id,))
+            if refreshed and refreshed["user1_confirmed"] and refreshed["user2_confirmed"]:
                 await db.execute("UPDATE matches SET status = 'confirmed' WHERE id = ?", (match_id,))
             await db.commit()
             return True, "Подтверждение принято."
 
     async def reject_meeting(self, match_id: int, user_id: int) -> bool:
         async with aiosqlite.connect(self.db_path) as db:
-            match = await db.execute_fetchone("SELECT user1_id, user2_id FROM matches WHERE id = ?", (match_id,))
+            match = await self._fetchone(db, "SELECT user1_id, user2_id FROM matches WHERE id = ?", (match_id,))
             if not match or user_id not in (match[0], match[1]):
                 return False
             await db.execute("UPDATE matches SET status = 'cancelled' WHERE id = ?", (match_id,))
@@ -67,7 +70,7 @@ class MeetingService:
     async def store_precheck(self, match_id: int, user_id: int, going: bool) -> bool:
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
-            match = await db.execute_fetchone("SELECT * FROM matches WHERE id = ?", (match_id,))
+            match = await self._fetchone(db, "SELECT * FROM matches WHERE id = ?", (match_id,))
             if not match or match["status"] != "confirmed":
                 return False
             if user_id == match["user1_id"]:
@@ -86,7 +89,7 @@ class MeetingService:
     async def save_feedback(self, match_id: int, from_user_id: int, came: bool) -> bool:
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
-            match = await db.execute_fetchone("SELECT * FROM matches WHERE id = ?", (match_id,))
+            match = await self._fetchone(db, "SELECT * FROM matches WHERE id = ?", (match_id,))
             if not match or match["status"] != "confirmed":
                 return False
 
@@ -104,8 +107,8 @@ class MeetingService:
                 (match_id, from_user_id, target_id, 1 if came else 0),
             )
 
-            updated = await db.execute_fetchone("SELECT user1_feedback, user2_feedback FROM matches WHERE id = ?", (match_id,))
-            if updated["user1_feedback"] is not None and updated["user2_feedback"] is not None:
+            updated = await self._fetchone(db, "SELECT user1_feedback, user2_feedback FROM matches WHERE id = ?", (match_id,))
+            if updated and updated["user1_feedback"] is not None and updated["user2_feedback"] is not None:
                 await db.execute("UPDATE matches SET status = 'completed' WHERE id = ?", (match_id,))
                 await self._settle_stars_and_rating(db, match_id)
 
@@ -115,10 +118,8 @@ class MeetingService:
     async def pending_confirm_expired(self) -> list[int]:
         now = datetime.now(UTC).isoformat()
         async with aiosqlite.connect(self.db_path) as db:
-            rows = await db.execute_fetchall(
-                "SELECT id FROM matches WHERE status='pending_confirm' AND confirm_deadline < ?",
-                (now,),
-            )
+            async with db.execute("SELECT id FROM matches WHERE status='pending_confirm' AND confirm_deadline < ?", (now,)) as cursor:
+                rows = await cursor.fetchall()
             ids = [row[0] for row in rows]
             for match_id in ids:
                 await db.execute("UPDATE matches SET status='expired' WHERE id = ?", (match_id,))
@@ -131,7 +132,7 @@ class MeetingService:
         after = now + timedelta(hours=3)
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
-            rows = await db.execute_fetchall(
+            async with db.execute(
                 """
                 SELECT * FROM matches
                 WHERE status='confirmed'
@@ -139,7 +140,8 @@ class MeetingService:
                   AND meetup_time <= ?
                 """,
                 (after.isoformat(),),
-            )
+            ) as cursor:
+                rows = await cursor.fetchall()
             ids = [row["id"] for row in rows]
             for match_id in ids:
                 await db.execute("UPDATE matches SET precheck_sent_at = ? WHERE id = ?", (now.isoformat(), match_id))
@@ -149,7 +151,7 @@ class MeetingService:
     async def cancel_precheck_timeouts(self) -> list[int]:
         now = datetime.now(UTC).isoformat()
         async with aiosqlite.connect(self.db_path) as db:
-            rows = await db.execute_fetchall(
+            async with db.execute(
                 """
                 SELECT id FROM matches
                 WHERE status='confirmed'
@@ -157,7 +159,8 @@ class MeetingService:
                   AND (user1_precheck IS NULL OR user2_precheck IS NULL)
                 """,
                 (now,),
-            )
+            ) as cursor:
+                rows = await cursor.fetchall()
             ids = [row[0] for row in rows]
             for match_id in ids:
                 await db.execute("UPDATE matches SET status='cancelled' WHERE id = ?", (match_id,))
@@ -169,7 +172,7 @@ class MeetingService:
         now = datetime.now(UTC).isoformat()
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
-            rows = await db.execute_fetchall(
+            async with db.execute(
                 """
                 SELECT * FROM matches
                 WHERE status='confirmed'
@@ -177,12 +180,13 @@ class MeetingService:
                   AND (user1_feedback IS NULL OR user2_feedback IS NULL)
                 """,
                 (now,),
-            )
+            ) as cursor:
+                rows = await cursor.fetchall()
             return [dict(r) for r in rows]
 
     async def _refund_locked(self, db: aiosqlite.Connection, match_id: int) -> None:
         db.row_factory = aiosqlite.Row
-        match = await db.execute_fetchone("SELECT * FROM matches WHERE id = ?", (match_id,))
+        match = await self._fetchone(db, "SELECT * FROM matches WHERE id = ?", (match_id,))
         if not match:
             return
         if match["user1_stars_locked"] > 0:
@@ -194,14 +198,11 @@ class MeetingService:
 
     async def _settle_stars_and_rating(self, db: aiosqlite.Connection, match_id: int) -> None:
         db.row_factory = aiosqlite.Row
-        match = await db.execute_fetchone("SELECT * FROM matches WHERE id = ?", (match_id,))
+        match = await self._fetchone(db, "SELECT * FROM matches WHERE id = ?", (match_id,))
         if not match:
             return
 
-        for user_col, lock_col, feedback_col in (
-            ("user1_id", "user1_stars_locked", "user1_feedback"),
-            ("user2_id", "user2_stars_locked", "user2_feedback"),
-        ):
+        for user_col, lock_col, feedback_col in (("user1_id", "user1_stars_locked", "user1_feedback"), ("user2_id", "user2_stars_locked", "user2_feedback")):
             user_id = match[user_col]
             locked = match[lock_col]
             came = match[feedback_col] == 1
@@ -225,7 +226,8 @@ class MeetingService:
     async def pending_match_for_user(self, user_id: int) -> dict | None:
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
-            row = await db.execute_fetchone(
+            row = await self._fetchone(
+                db,
                 """
                 SELECT * FROM matches
                 WHERE status = 'pending_confirm'
@@ -241,7 +243,8 @@ class MeetingService:
         now = datetime.now(UTC).isoformat()
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
-            row = await db.execute_fetchone(
+            row = await self._fetchone(
+                db,
                 """
                 SELECT * FROM matches
                 WHERE status = 'confirmed'
@@ -263,7 +266,8 @@ class MeetingService:
         now = datetime.now(UTC).isoformat()
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
-            row = await db.execute_fetchone(
+            row = await self._fetchone(
+                db,
                 """
                 SELECT * FROM matches
                 WHERE status = 'confirmed'
@@ -279,3 +283,7 @@ class MeetingService:
                 (now, user_id, user_id, user_id, user_id),
             )
             return dict(row) if row else None
+
+    async def _fetchone(self, db: aiosqlite.Connection, query: str, params: tuple) -> aiosqlite.Row | None:
+        async with db.execute(query, params) as cursor:
+            return await cursor.fetchone()

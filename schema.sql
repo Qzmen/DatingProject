@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
     age INTEGER NOT NULL,
     gender TEXT NOT NULL,
     city TEXT NOT NULL,
+    bio TEXT NOT NULL DEFAULT "",
     photo_file_id TEXT,
     stars_balance INTEGER NOT NULL DEFAULT 100,
     rating_score INTEGER NOT NULL DEFAULT 0,

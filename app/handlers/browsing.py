@@ -59,6 +59,7 @@ async def like_candidate(message: Message, state: FSMContext) -> None:
 
     if not match:
         await message.answer("Лайк отправлен ❤️")
+        await _notify_like_recipient(message, me, candidate_id)
         await _show_next_candidate(message, state, me["id"], me["city"])
         return
 
@@ -75,6 +76,7 @@ async def like_candidate(message: Message, state: FSMContext) -> None:
         "Нужно подтвердить офлайн-встречу в течение 24 часов.",
         reply_markup=meeting_decision_keyboard(),
     )
+    await _notify_like_recipient(message, me, candidate_id, is_match=True)
     await state.clear()
 
 
@@ -107,8 +109,33 @@ async def _show_next_candidate(message: Message, state: FSMContext, user_id: int
     await state.set_state(BrowsingStates.waiting_reaction)
     await state.update_data(candidate_id=candidate["id"])
 
-    caption = f"✨ {candidate['name']}, {candidate['age']}\n{candidate['gender']} • {candidate['city']}"
+    reputation = _format_reputation(candidate["rating_score"], candidate["rating_count"])
+    bio = candidate.get("bio") or "Без описания"
+    caption = (
+        f"{candidate['name']} {candidate['age']} ({candidate['city']})\n"
+        f"{bio}\n"
+        f"⭐ {candidate['stars_balance']} | Репутация: {reputation}"
+    )
     if candidate.get("photo_file_id"):
         await message.answer_photo(candidate["photo_file_id"], caption=caption, reply_markup=browse_keyboard())
     else:
         await message.answer(caption, reply_markup=browse_keyboard())
+
+
+async def _notify_like_recipient(message: Message, liker: dict, liked_user_id: int, is_match: bool = False) -> None:
+    liked_user = await message.bot.user_service.get_by_id(liked_user_id)
+    if not liked_user:
+        return
+
+    status_line = "💘 У вас взаимный лайк!" if is_match else "Тебя лайкнули ❤️"
+    text = (
+        f"{status_line}\n"
+        f"Это: {liker['name']}, {liker['age']} ({liker['city']})."
+    )
+    await message.bot.send_message(liked_user["tg_id"], text)
+
+
+def _format_reputation(score: int, count: int) -> str:
+    if count == 0:
+        return "новичок"
+    return f"{score / count:+.2f} ({count})"

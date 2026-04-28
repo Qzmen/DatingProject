@@ -30,7 +30,7 @@ class MatchingService:
             db.row_factory = aiosqlite.Row
             async with db.execute(
                 """
-                SELECT u.id, u.tg_id, u.name, u.age, u.gender, u.city, u.photo_file_id
+                SELECT u.id, u.tg_id, u.name, u.age, u.gender, u.city, u.bio, u.photo_file_id, u.stars_balance, u.rating_score, u.rating_count
                 FROM users u
                 WHERE u.id != ?
                   AND u.city = ?

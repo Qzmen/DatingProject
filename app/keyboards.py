@@ -8,6 +8,7 @@ MAIN_MENU_ENABLE = "▶️ Включить анкету"
 REG_GENDER_MALE = "👨 Мужчина"
 REG_GENDER_FEMALE = "👩 Женщина"
 REG_GENDER_OTHER = "✨ Другое"
+REG_SKIP_BIO = "⏭ Пропустить описание"
 REG_SKIP_PHOTO = "⏭ Пропустить фото"
 
 BROWSE_LIKE = "❤️ Лайк"
@@ -42,6 +43,14 @@ def registration_gender_keyboard() -> ReplyKeyboardMarkup:
         ],
         resize_keyboard=True,
         input_field_placeholder="Выбери пол",
+    )
+
+
+def registration_bio_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=REG_SKIP_BIO)]],
+        resize_keyboard=True,
+        input_field_placeholder="Добавь описание или пропусти",
     )
 
 

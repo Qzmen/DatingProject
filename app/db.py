@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
     age INTEGER NOT NULL,
     gender TEXT NOT NULL,
     city TEXT NOT NULL,
+    bio TEXT NOT NULL DEFAULT "",
     photo_file_id TEXT,
     stars_balance INTEGER NOT NULL DEFAULT 100,
     rating_score INTEGER NOT NULL DEFAULT 0,
@@ -59,4 +60,12 @@ CREATE TABLE IF NOT EXISTS feedback (
 async def init_db(database_url: str) -> None:
     async with aiosqlite.connect(database_url) as db:
         await db.executescript(SCHEMA_SQL)
+        await _ensure_user_columns(db)
         await db.commit()
+
+
+async def _ensure_user_columns(db: aiosqlite.Connection) -> None:
+    async with db.execute("PRAGMA table_info(users)") as cursor:
+        cols = {row[1] for row in await cursor.fetchall()}
+    if "bio" not in cols:
+        await db.execute("ALTER TABLE users ADD COLUMN bio TEXT NOT NULL DEFAULT ''")
