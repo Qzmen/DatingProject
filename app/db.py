@@ -9,9 +9,13 @@ CREATE TABLE IF NOT EXISTS users (
     gender TEXT NOT NULL,
     city TEXT NOT NULL,
     bio TEXT NOT NULL DEFAULT "",
+    description TEXT NOT NULL DEFAULT "",
     photo_file_id TEXT,
+    voice_file_id TEXT,
+    video_note_file_id TEXT,
     stars_balance INTEGER NOT NULL DEFAULT 100,
     rating_score INTEGER NOT NULL DEFAULT 0,
+    reputation_score INTEGER NOT NULL DEFAULT 0,
     rating_count INTEGER NOT NULL DEFAULT 0,
     is_blocked INTEGER NOT NULL DEFAULT 0,
     is_profile_enabled INTEGER NOT NULL DEFAULT 1,
@@ -32,32 +36,25 @@ CREATE TABLE IF NOT EXISTS matches (
     user2_id INTEGER NOT NULL,
     status TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    confirm_deadline TEXT NOT NULL,
-    meetup_time TEXT NOT NULL,
-    meetup_place TEXT NOT NULL,
-    user1_confirmed INTEGER NOT NULL DEFAULT 0,
-    user2_confirmed INTEGER NOT NULL DEFAULT 0,
-    user1_stars_locked INTEGER NOT NULL DEFAULT 0,
-    user2_stars_locked INTEGER NOT NULL DEFAULT 0,
-    precheck_sent_at TEXT,
-    user1_precheck INTEGER,
-    user2_precheck INTEGER,
-    user1_feedback INTEGER,
-    user2_feedback INTEGER,
-    call_requested_by INTEGER,
-    user1_call_accepted INTEGER NOT NULL DEFAULT 0,
-    user2_call_accepted INTEGER NOT NULL DEFAULT 0,
-    call_room_url TEXT
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    game_round INTEGER NOT NULL DEFAULT 0,
+    game_prompt TEXT,
+    game_invited_by INTEGER,
+    user1_reveal_requested INTEGER NOT NULL DEFAULT 0,
+    user2_reveal_requested INTEGER NOT NULL DEFAULT 0,
+    contact_revealed_at TEXT
 );
 
-CREATE TABLE IF NOT EXISTS feedback (
+CREATE TABLE IF NOT EXISTS match_messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     match_id INTEGER NOT NULL,
-    from_user_id INTEGER NOT NULL,
-    target_user_id INTEGER NOT NULL,
-    came INTEGER NOT NULL,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(match_id, from_user_id)
+    round_number INTEGER NOT NULL,
+    sender_user_id INTEGER NOT NULL,
+    message_type TEXT NOT NULL,
+    text TEXT,
+    file_id TEXT,
+    prompt TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 """
 
@@ -65,29 +62,4 @@ CREATE TABLE IF NOT EXISTS feedback (
 async def init_db(database_url: str) -> None:
     async with aiosqlite.connect(database_url) as db:
         await db.executescript(SCHEMA_SQL)
-        await _ensure_user_columns(db)
-        await _ensure_match_columns(db)
         await db.commit()
-
-
-async def _ensure_user_columns(db: aiosqlite.Connection) -> None:
-    async with db.execute("PRAGMA table_info(users)") as cursor:
-        cols = {row[1] for row in await cursor.fetchall()}
-    if "bio" not in cols:
-        await db.execute("ALTER TABLE users ADD COLUMN bio TEXT NOT NULL DEFAULT ''")
-
-    if "is_profile_enabled" not in cols:
-        await db.execute("ALTER TABLE users ADD COLUMN is_profile_enabled INTEGER NOT NULL DEFAULT 1")
-
-
-async def _ensure_match_columns(db: aiosqlite.Connection) -> None:
-    async with db.execute("PRAGMA table_info(matches)") as cursor:
-        cols = {row[1] for row in await cursor.fetchall()}
-    if "call_requested_by" not in cols:
-        await db.execute("ALTER TABLE matches ADD COLUMN call_requested_by INTEGER")
-    if "user1_call_accepted" not in cols:
-        await db.execute("ALTER TABLE matches ADD COLUMN user1_call_accepted INTEGER NOT NULL DEFAULT 0")
-    if "user2_call_accepted" not in cols:
-        await db.execute("ALTER TABLE matches ADD COLUMN user2_call_accepted INTEGER NOT NULL DEFAULT 0")
-    if "call_room_url" not in cols:
-        await db.execute("ALTER TABLE matches ADD COLUMN call_room_url TEXT")

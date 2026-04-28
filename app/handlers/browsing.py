@@ -1,132 +1,97 @@
 from aiogram import F, Router
 from aiogram.filters import Command
-from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, Message
 
-from app.keyboards import (
-    BROWSE_BACK_MENU,
-    BROWSE_LIKE,
-    BROWSE_SKIP,
-    MAIN_MENU_BROWSE,
-    browse_keyboard,
-    main_menu_keyboard,
-    meeting_decision_keyboard,
-)
-from app.states import BrowsingStates
+from app.keyboards import browse_keyboard, incoming_like_keyboard
 
 router = Router()
 
 
 @router.message(Command("browse"))
-@router.message(F.text == MAIN_MENU_BROWSE)
-async def browse(message: Message, state: FSMContext) -> None:
-    user_service = message.bot.user_service
-    matching_service = message.bot.matching_service
-
-    me = await user_service.get_by_tg_id(message.from_user.id)
+async def browse(message: Message) -> None:
+    me = await message.bot.matching_service.get_user_by_tg(message.from_user.id)
     if not me:
-        await message.answer("Сначала зарегистрируйся через /start")
+        await message.answer("Сначала /start")
         return
-
-    if me["is_blocked"]:
-        await message.answer("Твоя анкета заблокирована модератором.")
-        return
-
-    if me["is_profile_enabled"] == 0:
-        await message.answer(
-            "Анкета сейчас отключена. Включи её в меню и попробуй снова.",
-            reply_markup=main_menu_keyboard(profile_enabled=False),
-        )
-        return
-    await _show_next_candidate(message, state, me["id"], me["city"])
-
-
-@router.message(BrowsingStates.waiting_reaction, F.text == BROWSE_LIKE)
-async def like_candidate(message: Message, state: FSMContext) -> None:
-    data = await state.get_data()
-    candidate_id = data.get("candidate_id")
-    if not candidate_id:
-        await message.answer("Сначала выбери анкету из меню поиска.")
-        await state.clear()
-        return
-
-    me = await message.bot.user_service.get_by_tg_id(message.from_user.id)
-    match = await message.bot.matching_service.save_like_and_try_match(me["id"], candidate_id)
-
-    if not match:
-        await message.answer("Лайк отправлен ❤️")
-        await _notify_like_recipient(message, me, candidate_id)
-        await _show_next_candidate(message, state, me["id"], me["city"])
-        return
-
-    await message.answer(
-        "🔥 Взаимный лайк!\n"
-        "Добавили в список взаимных лайков 🤝\nЗвонок можно запустить позже из меню «Взаимные лайки».",
-        reply_markup=main_menu_keyboard(profile_enabled=True),
-    )
-    await _notify_like_recipient(message, me, candidate_id, is_match=True)
-    await state.clear()
-
-
-@router.message(BrowsingStates.waiting_reaction, F.text == BROWSE_SKIP)
-async def skip_candidate(message: Message, state: FSMContext) -> None:
-    me = await message.bot.user_service.get_by_tg_id(message.from_user.id)
-    await _show_next_candidate(message, state, me["id"], me["city"])
-
-
-@router.message(BrowsingStates.waiting_reaction, F.text == BROWSE_BACK_MENU)
-async def back_to_menu(message: Message, state: FSMContext) -> None:
-    await state.clear()
-    me = await message.bot.user_service.get_by_tg_id(message.from_user.id)
-    enabled = bool(me and me.get("is_profile_enabled", 1) == 1)
-    await message.answer("Возвращаю в меню 🏠", reply_markup=main_menu_keyboard(profile_enabled=enabled))
-
-
-@router.message(BrowsingStates.waiting_reaction)
-async def wrong_browse_choice(message: Message) -> None:
-    await message.answer("Используй кнопки: Лайк, Пропустить или В меню.", reply_markup=browse_keyboard())
-
-
-async def _show_next_candidate(message: Message, state: FSMContext, user_id: int, city: str) -> None:
-    candidate = await message.bot.matching_service.next_candidate(user_id, city)
+    candidate = await message.bot.matching_service.next_candidate(me["id"], me["city"])
     if not candidate:
-        await state.clear()
-        await message.answer("Пока нет подходящих анкет в твоём городе.", reply_markup=main_menu_keyboard(profile_enabled=True))
+        await message.answer("Пока нет анкет.")
         return
+    await _send_candidate(message, candidate)
 
-    await state.set_state(BrowsingStates.waiting_reaction)
-    await state.update_data(candidate_id=candidate["id"])
 
-    reputation = _format_reputation(candidate["rating_score"], candidate["rating_count"])
-    bio = candidate.get("bio") or "Без описания"
+@router.callback_query(F.data.startswith("skip:"))
+async def skip_candidate(callback: CallbackQuery) -> None:
+    await callback.answer("Пропущено")
+    fake_message = callback.message
+    me = await callback.bot.matching_service.get_user_by_tg(callback.from_user.id)
+    candidate = await callback.bot.matching_service.next_candidate(me["id"], me["city"])
+    if not candidate:
+        await fake_message.answer("Пока нет анкет.")
+        return
+    await _send_candidate(fake_message, candidate)
+
+
+@router.callback_query(F.data.startswith("like:"))
+async def like_candidate(callback: CallbackQuery) -> None:
+    liked_id = int(callback.data.split(":", 1)[1])
+    me = await callback.bot.matching_service.get_user_by_tg(callback.from_user.id)
+    is_match, match_id = await callback.bot.matching_service.like(me["id"], liked_id)
+    liked_user = await callback.bot.user_service.get_by_id(liked_id)
+
+    await callback.answer("Лайк отправлен")
+    if liked_user:
+        await _send_incoming_like(callback.bot, me, liked_user)
+
+    if is_match and match_id:
+        users = await callback.bot.matching_service.users_for_match(match_id)
+        if users:
+            for u in users:
+                await callback.bot.send_message(
+                    u["tg_id"],
+                    "🎉 У вас взаимная симпатия!\n🎲 Предложить игру знакомства через /matches",
+                )
+
+
+@router.callback_query(F.data.startswith("like_back:"))
+async def like_back(callback: CallbackQuery) -> None:
+    liker_id = int(callback.data.split(":", 1)[1])
+    me = await callback.bot.matching_service.get_user_by_tg(callback.from_user.id)
+    is_match, match_id = await callback.bot.matching_service.like(me["id"], liker_id)
+    await callback.answer("Взаимный лайк!" if is_match else "Лайк отправлен")
+    if is_match and match_id:
+        users = await callback.bot.matching_service.users_for_match(match_id)
+        if users:
+            for u in users:
+                await callback.bot.send_message(u["tg_id"], "🎉 У вас взаимная симпатия! /matches")
+
+
+@router.callback_query(F.data.startswith("pass_like:"))
+async def pass_like(callback: CallbackQuery) -> None:
+    liker_id = int(callback.data.split(":", 1)[1])
+    me = await callback.bot.matching_service.get_user_by_tg(callback.from_user.id)
+    await callback.bot.matching_service.pass_like(me["id"], liker_id)
+    await callback.answer("Пропущено")
+
+
+async def _send_candidate(message: Message, candidate: dict) -> None:
     caption = (
         f"{candidate['name']} {candidate['age']} ({candidate['city']})\n"
-        f"{bio}\n"
-        f"⭐ {candidate['stars_balance']} | Репутация: {reputation}"
+        f"{candidate.get('description') or ''}\n"
+        f"⭐ Репутация: {candidate.get('reputation_score', 0)}"
     )
     if candidate.get("photo_file_id"):
-        await message.answer_photo(candidate["photo_file_id"], caption=caption, reply_markup=browse_keyboard())
+        await message.answer_photo(candidate["photo_file_id"], caption=caption, reply_markup=browse_keyboard(candidate["id"]))
     else:
-        await message.answer(caption, reply_markup=browse_keyboard())
+        await message.answer(caption, reply_markup=browse_keyboard(candidate["id"]))
+    if candidate.get("voice_file_id"):
+        await message.answer("🎤 Голосовое приветствие")
+        await message.answer_voice(candidate["voice_file_id"])
 
 
-async def _notify_like_recipient(message: Message, liker: dict, liked_user_id: int, is_match: bool = False) -> None:
-    liked_user = await message.bot.user_service.get_by_id(liked_user_id)
-    if not liked_user:
-        return
-
-    status_line = "💘 У вас взаимный лайк!" if is_match else "Тебя лайкнули ❤️"
-    text = (
-        f"{status_line}\n"
-        f"Это: {liker['name']}, {liker['age']} ({liker['city']})."
-    )
-    await message.bot.send_message(liked_user["tg_id"], text)
-
-
-def _format_reputation(score: int, count: int) -> str:
-    if count == 0:
-        return "⭐ новичок"
-    value = (score / count + 5) / 2
-    value = max(0.0, min(5.0, value))
-    suffix = "оценка" if count == 1 else "оценок"
-    return f"⭐ {value:.1f} ({count} {suffix})"
+async def _send_incoming_like(bot, liker: dict, liked_user: dict) -> None:
+    text = f"Тебя лайкнули ❤️\n{liker['name']} {liker['age']} ({liker['city']})\n{liker.get('description') or ''}\n⭐ Репутация: {liker.get('reputation_score', 0)}"
+    if liker.get("photo_file_id"):
+        await bot.send_photo(liked_user["tg_id"], liker["photo_file_id"], caption=text, reply_markup=incoming_like_keyboard(liker["id"]))
+    else:
+        await bot.send_message(liked_user["tg_id"], text, reply_markup=incoming_like_keyboard(liker["id"]))

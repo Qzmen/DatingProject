@@ -1,115 +1,57 @@
-from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
-
-MAIN_MENU_BROWSE = "🔎 Смотреть анкеты"
-MAIN_MENU_PROFILE = "👤 Моя анкета"
-MAIN_MENU_LIKES = "💌 Кто лайкнул"
-MAIN_MENU_MATCHES = "🤝 Взаимные лайки"
-MAIN_MENU_DISABLE = "⏸ Отключить анкету"
-MAIN_MENU_ENABLE = "▶️ Включить анкету"
-MAIN_MENU_HOME = "🏠 В меню"
-
-REG_GENDER_MALE = "👨 Мужчина"
-REG_GENDER_FEMALE = "👩 Женщина"
-REG_GENDER_OTHER = "✨ Другое"
-REG_SKIP_BIO = "⏭ Пропустить описание"
-REG_SKIP_PHOTO = "⏭ Пропустить фото"
-
-BROWSE_LIKE = "❤️ Лайк"
-BROWSE_SKIP = "➡️ Пропустить"
-BROWSE_BACK_MENU = MAIN_MENU_HOME
-
-MEETING_CONFIRM = "✅ Подтвердить партнёра"
-MEETING_REJECT = "❌ Не подходит"
-CALL_REQUEST = "📞 Запросить звонок"
-CALL_ACCEPT = "✅ Принять звонок"
-CALL_REJECT = "❌ Отклонить звонок"
-PRECHECK_YES = "🟢 Иду"
-PRECHECK_NO = "🔴 Не иду"
-ATTENDANCE_YES = "👍 Пришёл(ла)"
-ATTENDANCE_NO = "👎 Не пришёл(ла)"
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 
-def main_menu_keyboard(profile_enabled: bool = True) -> ReplyKeyboardMarkup:
-    toggle_button = MAIN_MENU_DISABLE if profile_enabled else MAIN_MENU_ENABLE
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text=MAIN_MENU_BROWSE), KeyboardButton(text=MAIN_MENU_PROFILE)],
-            [KeyboardButton(text=MAIN_MENU_LIKES), KeyboardButton(text=MAIN_MENU_MATCHES)],
-            [KeyboardButton(text=toggle_button)],
-        ],
-        resize_keyboard=True,
-        input_field_placeholder="Выбери действие в меню 👇",
+def browse_keyboard(candidate_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[
+            InlineKeyboardButton(text="❤️ Лайк", callback_data=f"like:{candidate_id}"),
+            InlineKeyboardButton(text="⏭ Пропустить", callback_data=f"skip:{candidate_id}"),
+        ]]
     )
 
 
-def registration_gender_keyboard() -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text=REG_GENDER_MALE), KeyboardButton(text=REG_GENDER_FEMALE)],
-            [KeyboardButton(text=REG_GENDER_OTHER), KeyboardButton(text=MAIN_MENU_HOME)],
-        ],
-        resize_keyboard=True,
-        input_field_placeholder="Выбери пол",
+def incoming_like_keyboard(liker_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[
+            InlineKeyboardButton(text="❤️ Лайкнуть в ответ", callback_data=f"like_back:{liker_id}"),
+            InlineKeyboardButton(text="❌ Пропустить", callback_data=f"pass_like:{liker_id}"),
+        ]]
     )
 
 
-def registration_bio_keyboard() -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=REG_SKIP_BIO), KeyboardButton(text=MAIN_MENU_HOME)]],
-        resize_keyboard=True,
-        input_field_placeholder="Добавь описание или пропусти",
-    )
+def match_keyboard(match_id: int, status: str) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    if status in {"matched", "game_declined"}:
+        rows.append([InlineKeyboardButton(text="🎲 Предложить игру знакомства", callback_data=f"propose_game:{match_id}")])
+    if status == "game_active":
+        rows.append([InlineKeyboardButton(text="▶️ Продолжить игру", callback_data=f"continue_game:{match_id}")])
+        rows.append([InlineKeyboardButton(text="🔓 Предложить раскрыть контакт", callback_data=f"reveal_contact:{match_id}")])
+    rows.append([InlineKeyboardButton(text="❌ Закрыть матч", callback_data=f"close_match:{match_id}")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def registration_photo_keyboard() -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=REG_SKIP_PHOTO), KeyboardButton(text=MAIN_MENU_HOME)]],
-        resize_keyboard=True,
-        input_field_placeholder="Отправь фото или нажми кнопку",
-    )
+def game_invite_keyboard(match_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="✅ Принять", callback_data=f"accept_game:{match_id}"),
+        InlineKeyboardButton(text="❌ Отказаться", callback_data=f"decline_game:{match_id}"),
+    ]])
 
 
-def browse_keyboard() -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text=BROWSE_LIKE), KeyboardButton(text=BROWSE_SKIP)],
-            [KeyboardButton(text=BROWSE_BACK_MENU)],
-        ],
-        resize_keyboard=True,
-        input_field_placeholder="Лайкнуть или пропустить?",
-    )
+def game_round_keyboard(match_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔥 Следующий раунд", callback_data=f"next_round:{match_id}")],
+        [InlineKeyboardButton(text="🔓 Предложить раскрыть контакт", callback_data=f"reveal_contact:{match_id}")],
+        [InlineKeyboardButton(text="❌ Завершить игру", callback_data=f"close_match:{match_id}")],
+    ])
 
 
-def meeting_decision_keyboard() -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=MEETING_CONFIRM), KeyboardButton(text=MEETING_REJECT)]],
-        resize_keyboard=True,
-    )
+def contact_reveal_keyboard(match_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="✅ Да, раскрыть контакт", callback_data=f"accept_reveal:{match_id}"),
+        InlineKeyboardButton(text="❌ Нет, продолжить игру", callback_data=f"decline_reveal:{match_id}"),
+    ]])
 
 
-def precheck_keyboard() -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=PRECHECK_YES), KeyboardButton(text=PRECHECK_NO)]],
-        resize_keyboard=True,
-    )
-
-
-def attendance_keyboard() -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=ATTENDANCE_YES), KeyboardButton(text=ATTENDANCE_NO)]],
-        resize_keyboard=True,
-    )
-
-
-def call_request_keyboard() -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=CALL_REQUEST)], [KeyboardButton(text=MAIN_MENU_HOME)]],
-        resize_keyboard=True,
-    )
-
-
-def call_response_keyboard() -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=CALL_ACCEPT), KeyboardButton(text=CALL_REJECT)]],
-        resize_keyboard=True,
-    )
+def match_list_keyboard(matches: list[dict]) -> InlineKeyboardMarkup:
+    rows = [[InlineKeyboardButton(text=f"{m['partner_name']} • {m['status_ru']}", callback_data=f"match:{m['id']}")] for m in matches[:20]]
+    return InlineKeyboardMarkup(inline_keyboard=rows or [[InlineKeyboardButton(text="Пусто", callback_data="noop")]])

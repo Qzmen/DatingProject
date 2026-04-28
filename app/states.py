@@ -8,7 +8,5 @@ class RegistrationStates(StatesGroup):
     waiting_city = State()
     waiting_bio = State()
     waiting_photo = State()
-
-
-class BrowsingStates(StatesGroup):
-    waiting_reaction = State()
+    waiting_voice = State()
+    waiting_video_note = State()
