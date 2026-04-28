@@ -60,3 +60,12 @@ class UserService:
             )
             await db.commit()
             return cursor.rowcount > 0
+
+    async def set_profile_enabled(self, tg_id: int, enabled: bool) -> bool:
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute(
+                "UPDATE users SET is_blocked = ? WHERE tg_id = ?",
+                (0 if enabled else 1, tg_id),
+            )
+            await db.commit()
+            return cursor.rowcount > 0

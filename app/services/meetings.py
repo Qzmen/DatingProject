@@ -221,3 +221,61 @@ class MeetingService:
         await db.execute(
             "UPDATE users SET is_blocked = 1 WHERE rating_count >= 3 AND (CAST(rating_score AS REAL)/rating_count) <= -0.5"
         )
+
+    async def pending_match_for_user(self, user_id: int) -> dict | None:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            row = await db.execute_fetchone(
+                """
+                SELECT * FROM matches
+                WHERE status = 'pending_confirm'
+                  AND (user1_id = ? OR user2_id = ?)
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (user_id, user_id),
+            )
+            return dict(row) if row else None
+
+    async def precheck_match_for_user(self, user_id: int) -> dict | None:
+        now = datetime.now(UTC).isoformat()
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            row = await db.execute_fetchone(
+                """
+                SELECT * FROM matches
+                WHERE status = 'confirmed'
+                  AND precheck_sent_at IS NOT NULL
+                  AND meetup_time > ?
+                  AND (user1_id = ? OR user2_id = ?)
+                  AND (
+                    (user1_id = ? AND user1_precheck IS NULL)
+                    OR (user2_id = ? AND user2_precheck IS NULL)
+                  )
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (now, user_id, user_id, user_id, user_id),
+            )
+            return dict(row) if row else None
+
+    async def feedback_match_for_user(self, user_id: int) -> dict | None:
+        now = datetime.now(UTC).isoformat()
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            row = await db.execute_fetchone(
+                """
+                SELECT * FROM matches
+                WHERE status = 'confirmed'
+                  AND meetup_time < ?
+                  AND (user1_id = ? OR user2_id = ?)
+                  AND (
+                    (user1_id = ? AND user1_feedback IS NULL)
+                    OR (user2_id = ? AND user2_feedback IS NULL)
+                  )
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (now, user_id, user_id, user_id, user_id),
+            )
+            return dict(row) if row else None

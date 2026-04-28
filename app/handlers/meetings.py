@@ -1,82 +1,126 @@
 from aiogram import F, Router
-from aiogram.types import CallbackQuery
-from app.services.meetings import MeetingService
-from app.services.users import UserService
-from app.keyboards import meeting_decision_keyboard, precheck_keyboard, attendance_keyboard
+from aiogram.types import Message
+
+from app.keyboards import (
+    ATTENDANCE_NO,
+    ATTENDANCE_YES,
+    MEETING_CONFIRM,
+    MEETING_REJECT,
+    PRECHECK_NO,
+    PRECHECK_YES,
+    attendance_keyboard,
+    main_menu_keyboard,
+)
 
 router = Router()
 
-# Сервисы
-meeting_service = MeetingService("dating.db", meeting_price_stars=10)
-user_service = UserService("dating.db", default_stars_balance=100)
 
-@router.callback_query(F.data.startswith("confirm_meeting:"))
-async def confirm_meeting(callback: CallbackQuery) -> None:
-    match_id = int(callback.data.split(":")[1])
-    me = await user_service.get_by_tg_id(callback.from_user.id)
-    ok, text = await meeting_service.confirm_meeting(match_id, me["id"])
-    await callback.answer(text, show_alert=not ok)
+@router.message(F.text == MEETING_CONFIRM)
+async def confirm_meeting(message: Message) -> None:
+    me = await message.bot.user_service.get_by_tg_id(message.from_user.id)
+    if not me:
+        await message.answer("Сначала зарегистрируйся через /start")
+        return
+
+    match = await message.bot.meeting_service.pending_match_for_user(me["id"])
+    if not match:
+        await message.answer("Нет встречи, ожидающей подтверждения.", reply_markup=main_menu_keyboard(profile_enabled=True))
+        return
+
+    ok, text = await message.bot.meeting_service.confirm_meeting(match["id"], me["id"])
+    await message.answer(text)
 
     if ok:
-        users = await meeting_service.users_for_match(match_id)
-        match = await meeting_service.get_match(match_id)
-        if users and match and match["status"] == "confirmed":
+        users = await message.bot.meeting_service.users_for_match(match["id"])
+        match_fresh = await message.bot.meeting_service.get_match(match["id"])
+        if users and match_fresh and match_fresh["status"] == "confirmed":
             for user in users:
-                await callback.bot.send_message(
+                await message.bot.send_message(
                     user["tg_id"],
                     (
                         "✅ Оба подтвердили встречу!\n"
-                        f"Место: {match['meetup_place']}\n"
-                        f"Время: {match['meetup_time'][:16].replace('T', ' ')}"
+                        f"Место: {match_fresh['meetup_place']}\n"
+                        f"Время: {match_fresh['meetup_time'][:16].replace('T', ' ')}"
                     ),
-                    reply_markup=attendance_keyboard(match_id)
+                    reply_markup=attendance_keyboard(),
                 )
 
-@router.callback_query(F.data.startswith("reject_meeting:"))
-async def reject_meeting(callback: CallbackQuery) -> None:
-    match_id = int(callback.data.split(":")[1])
-    me = await user_service.get_by_tg_id(callback.from_user.id)
-    ok = await meeting_service.reject_meeting(match_id, me["id"])
-    if not ok:
-        await callback.answer("Нельзя отклонить", show_alert=True)
+
+@router.message(F.text == MEETING_REJECT)
+async def reject_meeting(message: Message) -> None:
+    me = await message.bot.user_service.get_by_tg_id(message.from_user.id)
+    if not me:
+        await message.answer("Сначала зарегистрируйся через /start")
         return
-    users = await meeting_service.users_for_match(match_id)
+
+    match = await message.bot.meeting_service.pending_match_for_user(me["id"])
+    if not match:
+        await message.answer("Нет встречи для отмены.")
+        return
+
+    ok = await message.bot.meeting_service.reject_meeting(match["id"], me["id"])
+    if not ok:
+        await message.answer("Нельзя отклонить встречу.")
+        return
+
+    users = await message.bot.meeting_service.users_for_match(match["id"])
     if users:
         for user in users:
-            await callback.bot.send_message(user["tg_id"], "❌ Встреча отменена одним из участников.")
-    await callback.answer("Встреча отклонена")
+            await message.bot.send_message(user["tg_id"], "❌ Встреча отменена одним из участников.")
 
-@router.callback_query(F.data.startswith("precheck_yes:"))
-async def precheck_yes(callback: CallbackQuery) -> None:
-    match_id = int(callback.data.split(":")[1])
-    me = await user_service.get_by_tg_id(callback.from_user.id)
-    await meeting_service.store_precheck(match_id, me["id"], True)
-    await callback.answer("Отлично, ждём встречу!")
 
-@router.callback_query(F.data.startswith("precheck_no:"))
-async def precheck_no(callback: CallbackQuery) -> None:
-    match_id = int(callback.data.split(":")[1])
-    me = await user_service.get_by_tg_id(callback.from_user.id)
-    await meeting_service.store_precheck(match_id, me["id"], False)
-    users = await meeting_service.users_for_match(match_id)
+@router.message(F.text == PRECHECK_YES)
+async def precheck_yes(message: Message) -> None:
+    await _store_precheck(message, True)
+
+
+@router.message(F.text == PRECHECK_NO)
+async def precheck_no(message: Message) -> None:
+    await _store_precheck(message, False)
+
+
+@router.message(F.text == ATTENDANCE_YES)
+async def came_yes(message: Message) -> None:
+    await _store_feedback(message, True)
+
+
+@router.message(F.text == ATTENDANCE_NO)
+async def came_no(message: Message) -> None:
+    await _store_feedback(message, False)
+
+
+async def _store_precheck(message: Message, going: bool) -> None:
+    me = await message.bot.user_service.get_by_tg_id(message.from_user.id)
+    if not me:
+        await message.answer("Сначала зарегистрируйся через /start")
+        return
+
+    match = await message.bot.meeting_service.precheck_match_for_user(me["id"])
+    if not match:
+        await message.answer("Сейчас нет встречи, где нужен pre-check.")
+        return
+
+    await message.bot.meeting_service.store_precheck(match["id"], me["id"], going)
+    if going:
+        await message.answer("Отлично, ждём встречу! 💫")
+        return
+
+    users = await message.bot.meeting_service.users_for_match(match["id"])
     if users:
         for user in users:
-            await callback.bot.send_message(user["tg_id"], "❌ Встреча отменена после pre-check.")
-    await callback.answer("Встреча отменена")
+            await message.bot.send_message(user["tg_id"], "❌ Встреча отменена после pre-check.")
 
-@router.callback_query(F.data.startswith("came_yes:"))
-async def came_yes(callback: CallbackQuery) -> None:
-    await _store_feedback(callback, True)
 
-@router.callback_query(F.data.startswith("came_no:"))
-async def came_no(callback: CallbackQuery) -> None:
-    await _store_feedback(callback, False)
-
-async def _store_feedback(callback: CallbackQuery, came: bool) -> None:
-    match_id = int(callback.data.split(":")[1])
-    me = await user_service.get_by_tg_id(callback.from_user.id)
-    ok = await meeting_service.save_feedback(match_id, me["id"], came)
-    if not ok:
-        await callback.answer("Не удалось сохранить ответ", show_alert=True)
+async def _store_feedback(message: Message, came: bool) -> None:
+    me = await message.bot.user_service.get_by_tg_id(message.from_user.id)
+    if not me:
+        await message.answer("Сначала зарегистрируйся через /start")
         return
-    await callback.answer("Ответ сохранён")
+
+    match = await message.bot.meeting_service.feedback_match_for_user(me["id"])
+    if not match:
+        await message.answer("Сейчас нет встречи, где нужен отзыв.")
+        return
+
+    ok = await message.bot.meeting_service.save_feedback(match["id"], me["id"], came)
+    await message.answer("Ответ сохранён ✅" if ok else "Не удалось сохранить ответ")
