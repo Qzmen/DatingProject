@@ -83,11 +83,21 @@ def game_invite_keyboard(match_id: int) -> InlineKeyboardMarkup:
 
 def game_round_keyboard(match_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🫶 Парный челлендж дня", callback_data=f"daily_challenge:{match_id}")],
         [InlineKeyboardButton(text="🎲 Игра в кубик", callback_data=f"dice_game:{match_id}")],
         [InlineKeyboardButton(text="🔥 Следующий раунд", callback_data=f"next_round:{match_id}")],
         [InlineKeyboardButton(text="🔓 Предложить раскрыть контакт", callback_data=f"reveal_contact:{match_id}")],
         [InlineKeyboardButton(text="❌ Завершить игру", callback_data=f"close_match:{match_id}")],
     ])
+
+
+def challenge_keyboard(match_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Челлендж выполнен", callback_data=f"complete_challenge:{match_id}")],
+            [InlineKeyboardButton(text="🔄 Новый челлендж", callback_data=f"daily_challenge:{match_id}")],
+        ]
+    )
 
 
 def contact_reveal_keyboard(match_id: int) -> InlineKeyboardMarkup:

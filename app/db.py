@@ -41,7 +41,13 @@ CREATE TABLE IF NOT EXISTS matches (
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     game_round INTEGER NOT NULL DEFAULT 0,
     game_prompt TEXT,
+    round_started_at TEXT,
+    round_expires_at TEXT,
     game_invited_by INTEGER,
+    challenge_text TEXT,
+    challenge_expires_at TEXT,
+    challenge_user1_done INTEGER NOT NULL DEFAULT 0,
+    challenge_user2_done INTEGER NOT NULL DEFAULT 0,
     user1_reveal_requested INTEGER NOT NULL DEFAULT 0,
     user2_reveal_requested INTEGER NOT NULL DEFAULT 0,
     contact_revealed_at TEXT
@@ -77,6 +83,20 @@ async def init_db(database_url: str) -> None:
             await db.execute("ALTER TABLE users ADD COLUMN username TEXT")
         if "prefer_same_city" not in cols:
             await db.execute("ALTER TABLE users ADD COLUMN prefer_same_city INTEGER NOT NULL DEFAULT 1")
+        async with db.execute("PRAGMA table_info(matches)") as cur:
+            m_cols = {row[1] for row in await cur.fetchall()}
+        if "round_started_at" not in m_cols:
+            await db.execute("ALTER TABLE matches ADD COLUMN round_started_at TEXT")
+        if "round_expires_at" not in m_cols:
+            await db.execute("ALTER TABLE matches ADD COLUMN round_expires_at TEXT")
+        if "challenge_text" not in m_cols:
+            await db.execute("ALTER TABLE matches ADD COLUMN challenge_text TEXT")
+        if "challenge_expires_at" not in m_cols:
+            await db.execute("ALTER TABLE matches ADD COLUMN challenge_expires_at TEXT")
+        if "challenge_user1_done" not in m_cols:
+            await db.execute("ALTER TABLE matches ADD COLUMN challenge_user1_done INTEGER NOT NULL DEFAULT 0")
+        if "challenge_user2_done" not in m_cols:
+            await db.execute("ALTER TABLE matches ADD COLUMN challenge_user2_done INTEGER NOT NULL DEFAULT 0")
         async with db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='user_gallery'") as cur:
             exists = await cur.fetchone()
         if not exists:

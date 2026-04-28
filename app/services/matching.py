@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import random
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import aiosqlite
 
@@ -61,6 +61,14 @@ VIDEO_PROMPTS = [
     "Кружок: как выглядишь, когда очень хочешь спать, но держишься.",
     "Кружок: без слов покажи «я классный(ая), но скромный(ая)».",
 ]
+CHALLENGE_PROMPTS = [
+    "Сфоткайте самый уютный угол дома и обменяйтесь снимками.",
+    "Сделайте фото вашего «идеального напитка вечера».",
+    "Покажите в фото вещь, которая лучше всего описывает ваш характер.",
+    "Сфоткайте вид из окна прямо сейчас.",
+    "Найдите и сфоткайте самый смешной предмет рядом с вами.",
+]
+ROUND_TIMER_SECONDS = 120
 
 
 class MatchingService:
@@ -177,10 +185,12 @@ class MatchingService:
 
     async def accept_game(self, match_id: int) -> bool:
         prompt = random.choice(TEXT_PROMPTS)
+        now = datetime.now(UTC)
+        expires = now + timedelta(seconds=ROUND_TIMER_SECONDS)
         async with aiosqlite.connect(self.db_path) as db:
             cur = await db.execute(
-                "UPDATE matches SET status='game_active', game_round=1, game_prompt=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                (prompt, match_id),
+                "UPDATE matches SET status='game_active', game_round=1, game_prompt=?, round_started_at=?, round_expires_at=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                (prompt, now.isoformat(), expires.isoformat(), match_id),
             )
             await db.commit()
             return cur.rowcount > 0
@@ -195,12 +205,66 @@ class MatchingService:
             next_round = int(row["game_round"] or 0) + 1
             prompt_pool = TEXT_PROMPTS if next_round % 3 == 1 else (VOICE_PROMPTS if next_round % 3 == 2 else VIDEO_PROMPTS)
             prompt = random.choice(prompt_pool)
+            now = datetime.now(UTC)
+            expires = now + timedelta(seconds=ROUND_TIMER_SECONDS)
             await db.execute(
-                "UPDATE matches SET game_round=?, game_prompt=?, status='game_active', updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                (next_round, prompt, match_id),
+                "UPDATE matches SET game_round=?, game_prompt=?, round_started_at=?, round_expires_at=?, status='game_active', updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                (next_round, prompt, now.isoformat(), expires.isoformat(), match_id),
             )
             await db.commit()
-            return {"round": next_round, "prompt": prompt}
+            return {"round": next_round, "prompt": prompt, "expires_at": expires.isoformat()}
+
+    async def is_round_expired(self, match_id: int) -> bool:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute("SELECT round_expires_at FROM matches WHERE id=?", (match_id,)) as cur:
+                row = await cur.fetchone()
+            if not row or not row["round_expires_at"]:
+                return False
+            return datetime.now(UTC) > datetime.fromisoformat(row["round_expires_at"])
+
+    async def challenge_for_match(self, match_id: int) -> dict | None:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT challenge_text, challenge_expires_at, challenge_user1_done, challenge_user2_done, user1_id, user2_id FROM matches WHERE id=?",
+                (match_id,),
+            ) as cur:
+                row = await cur.fetchone()
+            return dict(row) if row else None
+
+    async def create_or_refresh_challenge(self, match_id: int) -> dict | None:
+        challenge_text = random.choice(CHALLENGE_PROMPTS)
+        expires = datetime.now(UTC) + timedelta(hours=24)
+        async with aiosqlite.connect(self.db_path) as db:
+            cur = await db.execute(
+                """
+                UPDATE matches
+                SET challenge_text=?, challenge_expires_at=?, challenge_user1_done=0, challenge_user2_done=0, updated_at=CURRENT_TIMESTAMP
+                WHERE id=? AND status='game_active'
+                """,
+                (challenge_text, expires.isoformat(), match_id),
+            )
+            await db.commit()
+            if cur.rowcount == 0:
+                return None
+            return {"text": challenge_text, "expires_at": expires.isoformat()}
+
+    async def complete_challenge(self, match_id: int, user_id: int) -> dict | None:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute("SELECT user1_id, user2_id, challenge_user1_done, challenge_user2_done FROM matches WHERE id=?", (match_id,)) as cur:
+                row = await cur.fetchone()
+            if not row:
+                return None
+            col = "challenge_user1_done" if user_id == row["user1_id"] else "challenge_user2_done"
+            await db.execute(f"UPDATE matches SET {col}=1, updated_at=CURRENT_TIMESTAMP WHERE id=?", (match_id,))
+            async with db.execute("SELECT challenge_user1_done, challenge_user2_done, user1_id, user2_id FROM matches WHERE id=?", (match_id,)) as cur2:
+                state = await cur2.fetchone()
+            if state and state["challenge_user1_done"] and state["challenge_user2_done"]:
+                await db.execute("UPDATE users SET reputation_score = reputation_score + 2 WHERE id IN (?, ?)", (state["user1_id"], state["user2_id"]))
+            await db.commit()
+            return dict(state) if state else None
 
     async def decline_game(self, match_id: int) -> bool:
         async with aiosqlite.connect(self.db_path) as db:

@@ -38,7 +38,13 @@ CREATE TABLE IF NOT EXISTS matches (
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     game_round INTEGER NOT NULL DEFAULT 0,
     game_prompt TEXT,
+    round_started_at TEXT,
+    round_expires_at TEXT,
     game_invited_by INTEGER,
+    challenge_text TEXT,
+    challenge_expires_at TEXT,
+    challenge_user1_done INTEGER NOT NULL DEFAULT 0,
+    challenge_user2_done INTEGER NOT NULL DEFAULT 0,
     user1_reveal_requested INTEGER NOT NULL DEFAULT 0,
     user2_reveal_requested INTEGER NOT NULL DEFAULT 0,
     contact_revealed_at TEXT

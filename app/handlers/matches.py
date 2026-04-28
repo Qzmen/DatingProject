@@ -8,6 +8,7 @@ from app.keyboards import (
     BTN_GAME,
     BTN_MATCHES,
     BTN_STOP_GAME,
+    challenge_keyboard,
     contact_reveal_keyboard,
     game_invite_keyboard,
     game_round_keyboard,
@@ -58,7 +59,7 @@ async def _finish_round_if_ready(bot, match_id: int, round_number: int) -> None:
             for u in users:
                 await bot.send_message(
                     u["tg_id"],
-                    f"🔥 Следующий раунд {nxt['round']}: {nxt['prompt']}",
+                    f"🔥 Следующий раунд {nxt['round']}: {nxt['prompt']}\n⏱ У вас 2 минуты на ответ.",
                     reply_markup=game_round_keyboard(match_id),
                 )
 
@@ -143,7 +144,7 @@ async def accept_game(callback: CallbackQuery) -> None:
         for u in users:
             await callback.bot.send_message(
                 u["tg_id"],
-                f"✅ Игра знакомства началась!\nРаунд 1: {match['game_prompt']}",
+                f"✅ Игра знакомства началась!\nРаунд 1: {match['game_prompt']}\n⏱ У вас 2 минуты на ответ.",
                 reply_markup=game_round_keyboard(match_id),
             )
 
@@ -157,7 +158,20 @@ async def decline_game(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data.startswith("next_round:"))
 async def next_round(callback: CallbackQuery) -> None:
-    await callback.answer("Следующий раунд пока запускается автоматически после ответов")
+    match_id = int(callback.data.split(":", 1)[1])
+    nxt = await callback.bot.matching_service.start_next_round(match_id)
+    if not nxt:
+        await callback.answer("Не удалось запустить раунд", show_alert=True)
+        return
+    users = await callback.bot.matching_service.users_for_match(match_id)
+    if users:
+        for u in users:
+            await callback.bot.send_message(
+                u["tg_id"],
+                f"🔥 Следующий раунд {nxt['round']}: {nxt['prompt']}\n⏱ У вас 2 минуты на ответ.",
+                reply_markup=game_round_keyboard(match_id),
+            )
+    await callback.answer("Раунд запущен")
 
 
 @router.callback_query(F.data.startswith("continue_game:"))
@@ -169,7 +183,7 @@ async def continue_game(callback: CallbackQuery) -> None:
         await callback.answer("Матч не найден")
         return
     await callback.message.answer(
-        f"Раунд {match['game_round']}: {match['game_prompt']}",
+        f"Раунд {match['game_round']}: {match['game_prompt']}\n⏱ У вас 2 минуты на ответ.",
         reply_markup=game_round_keyboard(match_id),
     )
 
@@ -189,7 +203,7 @@ async def game_command(message: Message) -> None:
         return
     match = await message.bot.matching_service.get_match_for_user(active["id"], me["id"])
     await message.answer(
-        f"Раунд {match['game_round']}: {match['game_prompt']}",
+        f"Раунд {match['game_round']}: {match['game_prompt']}\n⏱ У вас 2 минуты на ответ.",
         reply_markup=game_round_keyboard(active["id"]),
     )
 
@@ -221,6 +235,9 @@ async def capture_round_answer(message: Message) -> None:
         return
     match = await message.bot.matching_service.get_match_for_user(active["id"], me["id"])
     if not match:
+        return
+    if await message.bot.matching_service.is_round_expired(active["id"]):
+        await message.answer("⏱ Время раунда вышло. Нажми «🔥 Следующий раунд».")
         return
     prompt = match.get("game_prompt") or ""
     round_number = int(match.get("game_round") or 1)
@@ -316,6 +333,51 @@ async def dice_game(callback: CallbackQuery) -> None:
             f"У {loser['name']} пока нет фото в галерее. Попроси отправить фото в чат игры.",
         )
     await callback.answer("Кубик брошен")
+
+
+@router.callback_query(F.data.startswith("daily_challenge:"))
+async def daily_challenge(callback: CallbackQuery) -> None:
+    match_id = int(callback.data.split(":", 1)[1])
+    data = await callback.bot.matching_service.create_or_refresh_challenge(match_id)
+    if not data:
+        await callback.answer("Челлендж доступен только в активной игре", show_alert=True)
+        return
+    users = await callback.bot.matching_service.users_for_match(match_id)
+    if not users:
+        await callback.answer("Матч не найден", show_alert=True)
+        return
+    for u in users:
+        await callback.bot.send_message(
+            u["tg_id"],
+            f"🫶 Парный челлендж дня:\n{data['text']}\n"
+            "Срок: 24 часа. После выполнения нажмите «✅ Челлендж выполнен».",
+            reply_markup=challenge_keyboard(match_id),
+        )
+    await callback.answer("Челлендж отправлен")
+
+
+@router.callback_query(F.data.startswith("complete_challenge:"))
+async def complete_challenge(callback: CallbackQuery) -> None:
+    match_id = int(callback.data.split(":", 1)[1])
+    me = await callback.bot.matching_service.get_user_by_tg(callback.from_user.id)
+    if not me:
+        await callback.answer("Сначала /start", show_alert=True)
+        return
+    state = await callback.bot.matching_service.complete_challenge(match_id, me["id"])
+    if not state:
+        await callback.answer("Челлендж не найден", show_alert=True)
+        return
+    users = await callback.bot.matching_service.users_for_match(match_id)
+    if not users:
+        await callback.answer("Матч не найден", show_alert=True)
+        return
+    both_done = bool(state["challenge_user1_done"] and state["challenge_user2_done"])
+    for u in users:
+        if both_done:
+            await callback.bot.send_message(u["tg_id"], "🎉 Оба выполнили челлендж дня! +2 репутации каждому.")
+        else:
+            await callback.bot.send_message(u["tg_id"], f"✅ {me['name']} отметил(а), что челлендж выполнен.")
+    await callback.answer("Отметка принята")
 
 
 @router.callback_query(F.data.startswith("reveal_contact:"))
