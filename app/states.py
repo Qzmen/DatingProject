@@ -10,3 +10,13 @@ class RegistrationStates(StatesGroup):
     waiting_photo = State()
     waiting_voice = State()
     waiting_video_note = State()
+
+
+class ProfileEditStates(StatesGroup):
+    waiting_name = State()
+    waiting_age = State()
+    waiting_city = State()
+    waiting_bio = State()
+    waiting_photo = State()
+    waiting_voice = State()
+    waiting_video_note = State()

@@ -428,3 +428,12 @@ class MatchingService:
             cur = await db.execute("UPDATE matches SET status='closed', updated_at=CURRENT_TIMESTAMP WHERE id=? AND status!='closed'", (match_id,))
             await db.commit()
             return cur.rowcount > 0
+
+    async def end_game(self, match_id: int) -> bool:
+        async with aiosqlite.connect(self.db_path) as db:
+            cur = await db.execute(
+                "UPDATE matches SET status='game_ended', updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='game_active'",
+                (match_id,),
+            )
+            await db.commit()
+            return cur.rowcount > 0

@@ -118,3 +118,31 @@ class UserService:
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute("INSERT INTO user_gallery(user_id, file_id) VALUES (?, ?)", (user_id, file_id))
             await db.commit()
+
+    async def update_profile_fields(self, tg_id: int, **fields) -> bool:
+        if not fields:
+            return False
+        allowed = {
+            "name",
+            "age",
+            "city",
+            "city_normalized",
+            "description",
+            "photo_file_id",
+            "voice_file_id",
+            "video_note_file_id",
+        }
+        payload = {k: v for k, v in fields.items() if k in allowed}
+        if not payload:
+            return False
+        keys = ", ".join(f"{k}=?" for k in payload.keys())
+        values = list(payload.values())
+        async with aiosqlite.connect(self.db_path) as db:
+            cur = await db.execute(f"UPDATE users SET {keys} WHERE tg_id = ?", (*values, tg_id))
+            if payload.get("photo_file_id"):
+                async with db.execute("SELECT id FROM users WHERE tg_id=?", (tg_id,)) as c:
+                    row = await c.fetchone()
+                if row:
+                    await db.execute("INSERT INTO user_gallery(user_id, file_id) VALUES (?, ?)", (row[0], payload["photo_file_id"]))
+            await db.commit()
+            return cur.rowcount > 0

@@ -7,6 +7,14 @@ BTN_SETTINGS = "⚙️ Настройки"
 BTN_BACK = "◀️ Назад"
 BTN_SKIP = "Пропустить"
 BTN_CITY_FILTER = "🌍 Фильтр по городу"
+BTN_EDIT_PROFILE = "✏️ Редактировать анкету"
+BTN_EDIT_NAME = "📝 Имя"
+BTN_EDIT_AGE = "🔢 Возраст"
+BTN_EDIT_CITY = "🏙 Город"
+BTN_EDIT_BIO = "📖 Описание"
+BTN_EDIT_PHOTO = "🖼 Фото"
+BTN_EDIT_VOICE = "🎤 Голосовое"
+BTN_EDIT_VIDEO_NOTE = "🎥 Кружок"
 
 BTN_END_GAME = "❌ Завершить игру"
 BTN_REFRESH = "🔄 Обновить статус"
@@ -87,6 +95,8 @@ def match_actions_keyboard(status: str) -> ReplyKeyboardMarkup:
         rows.append([KeyboardButton(text=BTN_MATCH_SHOW_CONTACT), KeyboardButton(text=BTN_MATCH_REBROWSE)])
     elif status == "closed":
         rows.append([KeyboardButton(text=BTN_MATCH_REBROWSE), KeyboardButton(text=BTN_MATCH_REMOVE)])
+    elif status == "game_ended":
+        rows.append([KeyboardButton(text=BTN_MATCH_REBROWSE), KeyboardButton(text=BTN_MATCH_REMOVE)])
     else:
         rows.append([KeyboardButton(text=BTN_MATCH_CLOSE)])
     if status not in {"contact_revealed", "closed", "game_active"}:
@@ -145,6 +155,28 @@ def settings_keyboard(city_filter_enabled: bool) -> ReplyKeyboardMarkup:
         keyboard=[[KeyboardButton(text=city_label)], [KeyboardButton(text=BTN_BACK)]],
         resize_keyboard=True,
         input_field_placeholder="Настройки",
+    )
+
+
+def profile_actions_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=BTN_EDIT_PROFILE)], [KeyboardButton(text=BTN_BACK)]],
+        resize_keyboard=True,
+        input_field_placeholder="Анкета",
+    )
+
+
+def profile_edit_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=BTN_EDIT_NAME), KeyboardButton(text=BTN_EDIT_AGE)],
+            [KeyboardButton(text=BTN_EDIT_CITY), KeyboardButton(text=BTN_EDIT_BIO)],
+            [KeyboardButton(text=BTN_EDIT_PHOTO), KeyboardButton(text=BTN_EDIT_VOICE)],
+            [KeyboardButton(text=BTN_EDIT_VIDEO_NOTE)],
+            [KeyboardButton(text=BTN_BACK)],
+        ],
+        resize_keyboard=True,
+        input_field_placeholder="Что изменить?",
     )
 
 

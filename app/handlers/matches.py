@@ -45,6 +45,7 @@ STATUS_RU = {
     "contact_revealed": "Контакт раскрыт",
     "closed": "Закрыт",
     "game_declined": "Игра отклонена",
+    "game_ended": "Игра завершена",
 }
 
 USER_CURRENT_MATCH: dict[int, int] = {}
@@ -289,8 +290,11 @@ async def stop_game_text(message: Message) -> None:
     if not active:
         await message.answer("Активной игры нет.")
         return
-    await message.bot.matching_service.close_match(active["id"])
-    await _notify_match_users(message.bot, active["id"], "Матч был закрыт.")
+    ended = await message.bot.matching_service.end_game(active["id"])
+    if not ended:
+        await message.answer("Сейчас нет активной игры для завершения.")
+        return
+    await _notify_match_users(message.bot, active["id"], "Игра завершена. Матч остаётся в списке.")
 
 
 @router.message(F.text == BTN_MATCH_CLOSE)
