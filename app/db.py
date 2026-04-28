@@ -78,6 +78,40 @@ CREATE TABLE IF NOT EXISTS user_gallery (
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_city_normalized ON users(city_normalized);
+
+CREATE TABLE IF NOT EXISTS pair_cooldowns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user1_id INTEGER NOT NULL,
+    user2_id INTEGER NOT NULL,
+    reason TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user1_id, user2_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_pair_cooldowns_expires_at ON pair_cooldowns(expires_at);
+
+CREATE TABLE IF NOT EXISTS monetization_plans (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT NOT NULL UNIQUE,
+    title TEXT NOT NULL,
+    stars_amount INTEGER NOT NULL,
+    price_rub INTEGER NOT NULL,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS payments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    plan_code TEXT NOT NULL,
+    amount_rub INTEGER NOT NULL,
+    stars_amount INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    provider TEXT NOT NULL DEFAULT 'stub',
+    external_payment_id TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 """
 
 
@@ -126,4 +160,13 @@ async def init_db(database_url: str) -> None:
             mm_cols = {row[1] for row in await cur.fetchall()}
         if "delivered_to_partner" not in mm_cols:
             await db.execute("ALTER TABLE match_messages ADD COLUMN delivered_to_partner INTEGER NOT NULL DEFAULT 0")
+        await db.execute(
+            """
+            INSERT OR IGNORE INTO monetization_plans(code, title, stars_amount, price_rub, is_active)
+            VALUES
+                ('starter_100', '100 звёзд', 100, 99, 1),
+                ('plus_250', '250 звёзд', 250, 199, 1),
+                ('max_700', '700 звёзд', 700, 499, 1)
+            """
+        )
         await db.commit()

@@ -7,14 +7,13 @@ from datetime import UTC, datetime, timedelta
 import aiosqlite
 
 ROUND_TIMER_SECONDS = 120
-ACTIVE_BROWSE_BLOCK_STATUSES = {
+PAIR_COOLDOWN_HOURS = 24
+ACTIVE_INTERACTION_STATUSES = {
     "matched",
     "game_invited",
     "waiting_game_accept",
     "game_active",
     "reveal_pending",
-    "active",
-    "pending",
 }
 
 PROMPTS: dict[str, list[str]] = {
@@ -65,7 +64,7 @@ class MatchingService:
             return dict(row) if row else None
 
     async def next_candidate(self, user_id: int, city_normalized: str, same_city_only: bool = True) -> dict | None:
-        placeholders = ",".join("?" for _ in ACTIVE_BROWSE_BLOCK_STATUSES)
+        placeholders = ",".join("?" for _ in ACTIVE_INTERACTION_STATUSES)
         params: list[object] = [user_id]
         query = f"""
             SELECT id, tg_id, name, age, city, description, photo_file_id, voice_file_id, video_note_file_id, reputation_score
@@ -79,8 +78,15 @@ class MatchingService:
                 WHERE ((m.user1_id = ? AND m.user2_id = candidate.id) OR (m.user1_id = candidate.id AND m.user2_id = ?))
                   AND m.status IN ({placeholders})
               )
+              AND NOT EXISTS (
+                SELECT 1
+                FROM pair_cooldowns pc
+                WHERE pc.user1_id = CASE WHEN ? < candidate.id THEN ? ELSE candidate.id END
+                  AND pc.user2_id = CASE WHEN ? < candidate.id THEN candidate.id ELSE ? END
+                  AND datetime(pc.expires_at) > datetime('now')
+              )
         """
-        params.extend([user_id, user_id, *ACTIVE_BROWSE_BLOCK_STATUSES])
+        params.extend([user_id, user_id, *ACTIVE_INTERACTION_STATUSES, user_id, user_id, user_id, user_id])
         if same_city_only:
             query += """
             AND COALESCE(NULLIF(candidate.city_normalized, ''), lower(replace(trim(candidate.city), 'ё', 'е'))) = ?
@@ -96,16 +102,35 @@ class MatchingService:
 
     async def _find_active_match(self, db: aiosqlite.Connection, user_a: int, user_b: int) -> dict | None:
         db.row_factory = aiosqlite.Row
-        placeholders = ",".join("?" for _ in ACTIVE_BROWSE_BLOCK_STATUSES)
+        placeholders = ",".join("?" for _ in ACTIVE_INTERACTION_STATUSES)
         sql = f"""
             SELECT * FROM matches
             WHERE ((user1_id=? AND user2_id=?) OR (user1_id=? AND user2_id=?))
               AND status IN ({placeholders})
             ORDER BY id DESC LIMIT 1
         """
-        async with db.execute(sql, (user_a, user_b, user_b, user_a, *ACTIVE_BROWSE_BLOCK_STATUSES)) as cur:
+        async with db.execute(sql, (user_a, user_b, user_b, user_a, *ACTIVE_INTERACTION_STATUSES)) as cur:
             row = await cur.fetchone()
         return dict(row) if row else None
+
+    @staticmethod
+    def _ordered_pair(user_a: int, user_b: int) -> tuple[int, int]:
+        return (user_a, user_b) if user_a < user_b else (user_b, user_a)
+
+    async def _upsert_pair_cooldown(self, db: aiosqlite.Connection, user_a: int, user_b: int, reason: str) -> None:
+        p1, p2 = self._ordered_pair(user_a, user_b)
+        expires_at = (datetime.now(UTC) + timedelta(hours=PAIR_COOLDOWN_HOURS)).isoformat()
+        await db.execute(
+            """
+            INSERT INTO pair_cooldowns(user1_id, user2_id, reason, expires_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(user1_id, user2_id) DO UPDATE SET
+                reason=excluded.reason,
+                expires_at=excluded.expires_at,
+                created_at=CURRENT_TIMESTAMP
+            """,
+            (p1, p2, reason, expires_at),
+        )
 
     async def like(self, liker_id: int, liked_id: int) -> tuple[bool, int | None, bool]:
         async with aiosqlite.connect(self.db_path) as db:
@@ -149,6 +174,7 @@ class MatchingService:
             else:
                 cur = await db.execute("INSERT INTO matches(user1_id,user2_id,status) VALUES (?, ?, 'matched')", (liker_id, liked_id))
                 match_id = int(cur.lastrowid)
+            await self._upsert_pair_cooldown(db, liker_id, liked_id, "match_created")
             await db.commit()
             return True, match_id, new_like_created
 

@@ -24,7 +24,7 @@ async def browse(message: Message) -> None:
         bool(me.get("prefer_same_city", 1)),
     )
     if not candidate:
-        await message.answer("Пока нет анкет.")
+        await message.answer("Пока нет новых анкет. Некоторые анкеты могут вернуться позже.")
         return
     await _send_candidate(message, candidate)
 
@@ -42,7 +42,7 @@ async def skip_candidate(callback: CallbackQuery) -> None:
         bool(me.get("prefer_same_city", 1)),
     )
     if not candidate:
-        await fake_message.answer("Пока нет анкет.")
+        await fake_message.answer("Пока нет новых анкет. Некоторые анкеты могут вернуться позже.")
         return
     await _send_candidate(fake_message, candidate)
 
@@ -74,7 +74,7 @@ async def like_candidate(callback: CallbackQuery) -> None:
         bool(me.get("prefer_same_city", 1)),
     )
     if not candidate:
-        await callback.message.answer("Пока нет анкет.")
+        await callback.message.answer("Пока нет новых анкет. Некоторые анкеты могут вернуться позже.")
         return
     await _send_candidate(callback.message, candidate)
 
