@@ -433,11 +433,9 @@ class MeetingService:
 
     async def _create_conference_url(self, match_id: int) -> str | None:
         if self.use_jitsi:
-            logger.error("USE_JITSI=true is unsupported by current requirements")
-            return None
+            return self._build_jitsi_link(match_id)
         if not self.yandex_telemost_enabled:
-            logger.error("Yandex Telemost integration is disabled")
-            return None
+            return self._build_jitsi_link(match_id)
         if not self.yandex_telemost_oauth_token:
             logger.error("YANDEX_TELEMOST_OAUTH_TOKEN is missing")
             return None
@@ -492,6 +490,10 @@ class MeetingService:
 
         logger.error("Telemost API response has no usable conference link: %s", data)
         return None
+
+    def _build_jitsi_link(self, match_id: int) -> str:
+        # Открытая стандартная Jitsi-комната без отдельного модератора/токена.
+        return f"https://meet.jit.si/dating-room-{match_id}"
 
     async def _fetchone(self, db: aiosqlite.Connection, query: str, params: tuple) -> aiosqlite.Row | None:
         async with db.execute(query, params) as cursor:
