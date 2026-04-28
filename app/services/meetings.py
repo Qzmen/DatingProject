@@ -223,6 +223,56 @@ class MeetingService:
         )
 
 
+
+    async def mutual_matches_for_user(self, user_id: int, limit: int = 20) -> list[dict]:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """
+                SELECT m.id, m.status,
+                       CASE WHEN m.user1_id = ? THEN u2.name ELSE u1.name END AS partner_name,
+                       CASE WHEN m.user1_id = ? THEN u2.tg_id ELSE u1.tg_id END AS partner_tg_id
+                FROM matches m
+                JOIN users u1 ON u1.id = m.user1_id
+                JOIN users u2 ON u2.id = m.user2_id
+                WHERE (m.user1_id = ? OR m.user2_id = ?)
+                  AND m.status IN ('mutual_like','pending_call','call_cancelled','pending_confirm')
+                ORDER BY m.id DESC
+                LIMIT ?
+                """,
+                (user_id, user_id, user_id, user_id, limit),
+            ) as cursor:
+                rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
+
+    async def confirm_partner(self, match_id: int, user_id: int, approved: bool) -> tuple[bool, str, dict | None]:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            match = await self._fetchone(db, "SELECT * FROM matches WHERE id = ?", (match_id,))
+            if not match or match['status'] != 'pending_confirm':
+                return False, 'Пара недоступна для подтверждения.', None
+            if user_id not in (match['user1_id'], match['user2_id']):
+                return False, 'Это не ваша пара.', None
+
+            if not approved:
+                await db.execute("UPDATE matches SET status = 'call_cancelled' WHERE id = ?", (match_id,))
+                await db.execute("DELETE FROM likes WHERE (liker_id = ? AND liked_id = ?) OR (liker_id = ? AND liked_id = ?)", (match['user1_id'], match['user2_id'], match['user2_id'], match['user1_id']))
+                await db.commit()
+                return True, 'Понял, идём дальше 👌', None
+
+            col = 'user1_confirmed' if user_id == match['user1_id'] else 'user2_confirmed'
+            await db.execute(f"UPDATE matches SET {col}=1 WHERE id = ?", (match_id,))
+            updated = await self._fetchone(db, "SELECT user1_confirmed, user2_confirmed FROM matches WHERE id = ?", (match_id,))
+            if updated and updated['user1_confirmed'] and updated['user2_confirmed']:
+                await db.execute("UPDATE matches SET status = 'partner_shared' WHERE id = ?", (match_id,))
+                partner_id = match['user2_id'] if user_id == match['user1_id'] else match['user1_id']
+                partner = await self._fetchone(db, "SELECT tg_id, name FROM users WHERE id = ?", (partner_id,))
+                await db.commit()
+                return True, 'Оба подтвердили партнёра!', dict(partner) if partner else None
+
+            await db.commit()
+            return True, 'Отлично, ждём решение второго человека.', None
+
     async def pending_call_match_for_user(self, user_id: int) -> dict | None:
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
@@ -243,16 +293,17 @@ class MeetingService:
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
             match = await self._fetchone(db, "SELECT * FROM matches WHERE id = ?", (match_id,))
-            if not match or match["status"] != "pending_call":
+            if not match or match["status"] not in ("mutual_like", "pending_call", "call_cancelled"):
                 return False, "Матч для звонка недоступен."
             if user_id not in (match["user1_id"], match["user2_id"]):
                 return False, "Это не ваш матч."
 
             accept_col = "user1_call_accepted" if user_id == match["user1_id"] else "user2_call_accepted"
             await db.execute(
-                f"UPDATE matches SET call_requested_by = ?, {accept_col} = 1 WHERE id = ?",
+                "UPDATE matches SET status = 'pending_call', call_requested_by = ?, user1_call_accepted = 0, user2_call_accepted = 0 WHERE id = ?",
                 (user_id, match_id),
             )
+            await db.execute(f"UPDATE matches SET {accept_col} = 1 WHERE id = ?", (match_id,))
             await db.commit()
             return True, "Запрос на звонок отправлен."
 
@@ -260,7 +311,7 @@ class MeetingService:
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
             match = await self._fetchone(db, "SELECT * FROM matches WHERE id = ?", (match_id,))
-            if not match or match["status"] != "pending_call":
+            if not match or match["status"] not in ("mutual_like", "pending_call", "call_cancelled"):
                 return False, "Матч для звонка недоступен."
             if user_id not in (match["user1_id"], match["user2_id"]):
                 return False, "Это не ваш матч."
@@ -268,9 +319,10 @@ class MeetingService:
                 return False, "Сначала кто-то должен отправить запрос на звонок."
 
             if not accepted:
-                await db.execute("UPDATE matches SET status = 'cancelled' WHERE id = ?", (match_id,))
+                await db.execute("UPDATE matches SET status = 'call_cancelled' WHERE id = ?", (match_id,))
+                await db.execute("DELETE FROM likes WHERE (liker_id = ? AND liked_id = ?) OR (liker_id = ? AND liked_id = ?)", (match['user1_id'], match['user2_id'], match['user2_id'], match['user1_id']))
                 await db.commit()
-                return True, "Звонок отклонён, матч отменён."
+                return True, "Звонок отклонён. Можно лайкнуть друг друга снова."
 
             if user_id == match["user1_id"]:
                 await db.execute("UPDATE matches SET user1_call_accepted = 1 WHERE id = ?", (match_id,))

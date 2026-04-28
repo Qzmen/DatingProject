@@ -3,6 +3,7 @@ from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 MAIN_MENU_BROWSE = "🔎 Смотреть анкеты"
 MAIN_MENU_PROFILE = "👤 Моя анкета"
 MAIN_MENU_LIKES = "💌 Кто лайкнул"
+MAIN_MENU_MATCHES = "🤝 Взаимные лайки"
 MAIN_MENU_DISABLE = "⏸ Отключить анкету"
 MAIN_MENU_ENABLE = "▶️ Включить анкету"
 MAIN_MENU_HOME = "🏠 В меню"
@@ -17,8 +18,8 @@ BROWSE_LIKE = "❤️ Лайк"
 BROWSE_SKIP = "➡️ Пропустить"
 BROWSE_BACK_MENU = MAIN_MENU_HOME
 
-MEETING_CONFIRM = "✅ Подтвердить встречу"
-MEETING_REJECT = "❌ Отменить встречу"
+MEETING_CONFIRM = "✅ Подтвердить партнёра"
+MEETING_REJECT = "❌ Не подходит"
 CALL_REQUEST = "📞 Запросить звонок"
 CALL_ACCEPT = "✅ Принять звонок"
 CALL_REJECT = "❌ Отклонить звонок"
@@ -33,7 +34,8 @@ def main_menu_keyboard(profile_enabled: bool = True) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text=MAIN_MENU_BROWSE), KeyboardButton(text=MAIN_MENU_PROFILE)],
-            [KeyboardButton(text=MAIN_MENU_LIKES), KeyboardButton(text=toggle_button)],
+            [KeyboardButton(text=MAIN_MENU_LIKES), KeyboardButton(text=MAIN_MENU_MATCHES)],
+            [KeyboardButton(text=toggle_button)],
         ],
         resize_keyboard=True,
         input_field_placeholder="Выбери действие в меню 👇",

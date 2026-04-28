@@ -1,3 +1,5 @@
+import re
+
 from aiogram import F, Router
 from aiogram.types import Message
 
@@ -11,16 +13,13 @@ from app.keyboards import (
     MEETING_REJECT,
     PRECHECK_NO,
     PRECHECK_YES,
-    attendance_keyboard,
-    call_request_keyboard,
-    call_response_keyboard,
-    main_menu_keyboard,
     meeting_decision_keyboard,
 )
 
 router = Router()
 
 
+@router.message(F.text.startswith("📞 Позвонить #"))
 @router.message(F.text == CALL_REQUEST)
 async def request_call(message: Message) -> None:
     me = await message.bot.user_service.get_by_tg_id(message.from_user.id)
@@ -28,27 +27,28 @@ async def request_call(message: Message) -> None:
         await message.answer("Сначала зарегистрируйся через /start")
         return
 
-    match = await message.bot.meeting_service.pending_call_match_for_user(me["id"])
-    if not match:
-        await message.answer("Сейчас нет взаимного лайка для звонка.")
-        return
+    selected_id = None
+    found = re.search(r"#(\d+)$", (message.text or "").strip())
+    if found:
+        selected_id = int(found.group(1))
 
-    ok, text = await message.bot.meeting_service.request_call(match["id"], me["id"])
+    if selected_id is None:
+        match = await message.bot.meeting_service.pending_call_match_for_user(me["id"])
+        if not match:
+            await message.answer("Сейчас нет взаимного лайка для звонка.")
+            return
+        selected_id = match["id"]
+
+    ok, text = await message.bot.meeting_service.request_call(selected_id, me["id"])
     await message.answer(text)
     if not ok:
         return
 
-    users = await message.bot.meeting_service.users_for_match(match["id"])
-    if not users:
-        return
-    for user in users:
-        if user["id"] == me["id"]:
-            continue
-        await message.bot.send_message(
-            user["tg_id"],
-            "Тебе отправили запрос на совместный звонок 📞",
-            reply_markup=call_response_keyboard(),
-        )
+    users = await message.bot.meeting_service.users_for_match(selected_id)
+    if users:
+        for user in users:
+            if user["id"] != me["id"]:
+                await message.bot.send_message(user["tg_id"], "Тебе отправили запрос на звонок 📞")
 
 
 @router.message(F.text == CALL_ACCEPT)
@@ -62,7 +62,7 @@ async def reject_call(message: Message) -> None:
 
 
 @router.message(F.text == MEETING_CONFIRM)
-async def confirm_meeting(message: Message) -> None:
+async def confirm_partner(message: Message) -> None:
     me = await message.bot.user_service.get_by_tg_id(message.from_user.id)
     if not me:
         await message.answer("Сначала зарегистрируйся через /start")
@@ -70,69 +70,45 @@ async def confirm_meeting(message: Message) -> None:
 
     match = await message.bot.meeting_service.pending_match_for_user(me["id"])
     if not match:
-        await message.answer("Нет встречи, ожидающей подтверждения.", reply_markup=main_menu_keyboard(profile_enabled=True))
+        await message.answer("Сейчас нет пары для подтверждения.")
         return
 
-    ok, text = await message.bot.meeting_service.confirm_meeting(match["id"], me["id"])
+    ok, text, partner = await message.bot.meeting_service.confirm_partner(match["id"], me["id"], approved=True)
     await message.answer(text)
-
-    if ok:
-        users = await message.bot.meeting_service.users_for_match(match["id"])
-        match_fresh = await message.bot.meeting_service.get_match(match["id"])
-        if users and match_fresh and match_fresh["status"] == "confirmed":
-            for user in users:
-                await message.bot.send_message(
-                    user["tg_id"],
-                    (
-                        "✅ Оба подтвердили встречу!\n"
-                        f"Место: {match_fresh['meetup_place']}\n"
-                        f"Время: {match_fresh['meetup_time'][:16].replace('T', ' ')}"
-                    ),
-                    reply_markup=attendance_keyboard(),
-                )
-
-
-@router.message(F.text == MEETING_REJECT)
-async def reject_meeting(message: Message) -> None:
-    me = await message.bot.user_service.get_by_tg_id(message.from_user.id)
-    if not me:
-        await message.answer("Сначала зарегистрируйся через /start")
-        return
-
-    match = await message.bot.meeting_service.pending_match_for_user(me["id"])
-    if not match:
-        await message.answer("Нет встречи для отмены.")
-        return
-
-    ok = await message.bot.meeting_service.reject_meeting(match["id"], me["id"])
-    if not ok:
-        await message.answer("Нельзя отклонить встречу.")
+    if not ok or not partner:
         return
 
     users = await message.bot.meeting_service.users_for_match(match["id"])
     if users:
         for user in users:
-            await message.bot.send_message(user["tg_id"], "❌ Встреча отменена одним из участников.")
+            other = users[0] if users[1]["id"] == user["id"] else users[1]
+            await message.bot.send_message(
+                user["tg_id"],
+                f"✅ Партнёр подтверждён! Telegram ID партнёра: {other['tg_id']}",
+            )
 
 
-@router.message(F.text == PRECHECK_YES)
-async def precheck_yes(message: Message) -> None:
-    await _store_precheck(message, True)
+@router.message(F.text == MEETING_REJECT)
+async def reject_partner(message: Message) -> None:
+    me = await message.bot.user_service.get_by_tg_id(message.from_user.id)
+    if not me:
+        await message.answer("Сначала зарегистрируйся через /start")
+        return
 
+    match = await message.bot.meeting_service.pending_match_for_user(me["id"])
+    if not match:
+        await message.answer("Сейчас нет пары для подтверждения.")
+        return
 
-@router.message(F.text == PRECHECK_NO)
-async def precheck_no(message: Message) -> None:
-    await _store_precheck(message, False)
+    ok, text, _ = await message.bot.meeting_service.confirm_partner(match["id"], me["id"], approved=False)
+    await message.answer(text)
+    if not ok:
+        return
 
-
-@router.message(F.text == ATTENDANCE_YES)
-async def came_yes(message: Message) -> None:
-    await _store_feedback(message, True)
-
-
-@router.message(F.text == ATTENDANCE_NO)
-async def came_no(message: Message) -> None:
-    await _store_feedback(message, False)
+    users = await message.bot.meeting_service.users_for_match(match["id"])
+    if users:
+        for user in users:
+            await message.bot.send_message(user["tg_id"], "❌ Один из вас не подтвердил партнёра. Идём дальше.")
 
 
 async def _respond_call(message: Message, accepted: bool) -> None:
@@ -152,64 +128,23 @@ async def _respond_call(message: Message, accepted: bool) -> None:
         return
 
     users = await message.bot.meeting_service.users_for_match(match["id"])
-    if not users:
-        return
-
     match_fresh = await message.bot.meeting_service.get_match(match["id"])
-    if not match_fresh:
+    if not users or not match_fresh:
         return
 
     if match_fresh["status"] == "pending_confirm":
         call_link = match_fresh.get("call_room_url")
         for user in users:
-            text = "Звонок согласован ✅\nТеперь можно зайти в конференцию по ссылке ниже."
+            text = "Звонок согласован ✅"
             if call_link:
-                text += f"\n\n🔗 {call_link}"
-            text += "\n\nПосле звонка предложи офлайн-встречу кнопкой ниже."
-            await message.bot.send_message(
-                user["tg_id"],
-                text,
-                reply_markup=meeting_decision_keyboard(),
-            )
-        return
-
-    if match_fresh["status"] == "cancelled":
-        for user in users:
-            await message.bot.send_message(user["tg_id"], "❌ Запрос на звонок отклонён. Матч отменён.")
+                text += f"\n🔗 {call_link}"
+            text += "\nПодтверди, хочешь продолжить с этим партнёром или нет."
+            await message.bot.send_message(user["tg_id"], text, reply_markup=meeting_decision_keyboard())
 
 
-async def _store_precheck(message: Message, going: bool) -> None:
-    me = await message.bot.user_service.get_by_tg_id(message.from_user.id)
-    if not me:
-        await message.answer("Сначала зарегистрируйся через /start")
-        return
-
-    match = await message.bot.meeting_service.precheck_match_for_user(me["id"])
-    if not match:
-        await message.answer("Сейчас нет встречи, где нужен pre-check.")
-        return
-
-    await message.bot.meeting_service.store_precheck(match["id"], me["id"], going)
-    if going:
-        await message.answer("Отлично, ждём встречу! 💫")
-        return
-
-    users = await message.bot.meeting_service.users_for_match(match["id"])
-    if users:
-        for user in users:
-            await message.bot.send_message(user["tg_id"], "❌ Встреча отменена после pre-check.")
-
-
-async def _store_feedback(message: Message, came: bool) -> None:
-    me = await message.bot.user_service.get_by_tg_id(message.from_user.id)
-    if not me:
-        await message.answer("Сначала зарегистрируйся через /start")
-        return
-
-    match = await message.bot.meeting_service.feedback_match_for_user(me["id"])
-    if not match:
-        await message.answer("Сейчас нет встречи, где нужен отзыв.")
-        return
-
-    ok = await message.bot.meeting_service.save_feedback(match["id"], me["id"], came)
-    await message.answer("Ответ сохранён ✅" if ok else "Не удалось сохранить ответ")
+@router.message(F.text == PRECHECK_YES)
+@router.message(F.text == PRECHECK_NO)
+@router.message(F.text == ATTENDANCE_YES)
+@router.message(F.text == ATTENDANCE_NO)
+async def deprecated_flow_hint(message: Message) -> None:
+    await message.answer("Этот этап отключён. Используй подтверждение партнёра в текущем сценарии.")

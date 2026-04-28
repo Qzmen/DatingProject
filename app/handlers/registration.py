@@ -3,13 +3,14 @@ import re
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.types import KeyboardButton, Message, ReplyKeyboardMarkup
 
 from app.keyboards import (
     MAIN_MENU_DISABLE,
     MAIN_MENU_ENABLE,
     MAIN_MENU_HOME,
     MAIN_MENU_LIKES,
+    MAIN_MENU_MATCHES,
     MAIN_MENU_PROFILE,
     REG_GENDER_FEMALE,
     REG_GENDER_MALE,
@@ -176,6 +177,29 @@ async def enable_profile(message: Message) -> None:
         await message.answer("Сначала зарегистрируйся через /start")
         return
     await message.answer("Анкета снова активна ✅", reply_markup=main_menu_keyboard(profile_enabled=True))
+
+
+@router.message(F.text == MAIN_MENU_MATCHES)
+async def show_mutual_matches(message: Message) -> None:
+    me = await message.bot.user_service.get_by_tg_id(message.from_user.id)
+    if not me:
+        await message.answer("Сначала зарегистрируйся через /start")
+        return
+
+    items = await message.bot.meeting_service.mutual_matches_for_user(me["id"])
+    if not items:
+        await message.answer("Пока взаимных лайков нет 🤝")
+        return
+
+    lines = ["🤝 Взаимные лайки:"]
+    buttons: list[list[KeyboardButton]] = []
+    for item in items[:8]:
+        lines.append(f"#{item['id']} • {item['partner_name']} • статус: {item['status']}")
+        buttons.append([KeyboardButton(text=f"📞 Позвонить #{item['id']}")])
+
+    buttons.append([KeyboardButton(text=MAIN_MENU_HOME)])
+    kb = ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
+    await message.answer("\n".join(lines), reply_markup=kb)
 
 
 @router.message(F.text == MAIN_MENU_HOME)

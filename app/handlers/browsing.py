@@ -10,7 +10,6 @@ from app.keyboards import (
     MAIN_MENU_BROWSE,
     browse_keyboard,
     main_menu_keyboard,
-    call_request_keyboard,
     meeting_decision_keyboard,
 )
 from app.states import BrowsingStates
@@ -39,21 +38,6 @@ async def browse(message: Message, state: FSMContext) -> None:
             reply_markup=main_menu_keyboard(profile_enabled=False),
         )
         return
-
-    active_match = await matching_service.active_match_for_user(me["id"])
-    if active_match:
-        if active_match["status"] == "pending_call":
-            await message.answer(
-                "У тебя уже есть взаимный лайк. Сначала пройдите этап звонка.",
-                reply_markup=call_request_keyboard(),
-            )
-        else:
-            await message.answer(
-                "У тебя уже есть активная встреча. Подтверди или отмени её.",
-                reply_markup=meeting_decision_keyboard(),
-            )
-        return
-
     await _show_next_candidate(message, state, me["id"], me["city"])
 
 
@@ -75,18 +59,10 @@ async def like_candidate(message: Message, state: FSMContext) -> None:
         await _show_next_candidate(message, state, me["id"], me["city"])
         return
 
-    if match.get("reason") == "active_meeting":
-        await message.answer(
-            "Один из вас уже занят активной встречей. Попробуй позже.",
-            reply_markup=main_menu_keyboard(profile_enabled=True),
-        )
-        await state.clear()
-        return
-
     await message.answer(
         "🔥 Взаимный лайк!\n"
-        "Сначала отправьте запрос на совместный звонок 📞",
-        reply_markup=call_request_keyboard(),
+        "Добавили в список взаимных лайков 🤝\nЗвонок можно запустить позже из меню «Взаимные лайки».",
+        reply_markup=main_menu_keyboard(profile_enabled=True),
     )
     await _notify_like_recipient(message, me, candidate_id, is_match=True)
     await state.clear()

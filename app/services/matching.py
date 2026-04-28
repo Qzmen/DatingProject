@@ -4,7 +4,7 @@ import aiosqlite
 from datetime import datetime, timedelta, UTC
 
 
-ACTIVE_STATUSES = ("pending_call", "pending_confirm", "confirmed")
+ACTIVE_STATUSES = ("pending_call", "pending_confirm")
 
 
 class MatchingService:
@@ -85,22 +85,6 @@ class MatchingService:
                 await db.commit()
                 return None
 
-            async with db.execute(
-                "SELECT id FROM matches WHERE (user1_id=? OR user2_id=?) AND status IN ('pending_call','pending_confirm','confirmed')",
-                (liker_id, liker_id),
-            ) as cursor:
-                active_liker = await cursor.fetchone()
-
-            async with db.execute(
-                "SELECT id FROM matches WHERE (user1_id=? OR user2_id=?) AND status IN ('pending_call','pending_confirm','confirmed')",
-                (liked_id, liked_id),
-            ) as cursor:
-                active_liked = await cursor.fetchone()
-
-            if active_liker or active_liked:
-                await db.commit()
-                return {"reason": "active_meeting"}
-
             now = datetime.now(UTC)
             confirm_deadline = now + timedelta(hours=24)
             meetup_time = now + timedelta(hours=6)
@@ -109,7 +93,7 @@ class MatchingService:
             async with db.execute(
                 """
                 INSERT INTO matches(user1_id, user2_id, status, confirm_deadline, meetup_time, meetup_place)
-                VALUES (?, ?, 'pending_call', ?, ?, ?)
+                VALUES (?, ?, 'mutual_like', ?, ?, ?)
                 """,
                 (liker_id, liked_id, confirm_deadline.isoformat(), meetup_time.isoformat(), meetup_place),
             ) as cursor:
@@ -124,6 +108,7 @@ class MatchingService:
                 "meetup_time": meetup_time.isoformat(),
                 "meetup_place": meetup_place,
             }
+
 
     async def list_matches(self, limit: int = 50) -> list[dict]:
         async with aiosqlite.connect(self.db_path) as db:
