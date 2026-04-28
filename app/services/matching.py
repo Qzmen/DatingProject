@@ -1,0 +1,102 @@
+from __future__ import annotations
+
+import aiosqlite
+from datetime import datetime, timedelta, UTC
+
+
+ACTIVE_STATUSES = ("pending_confirm", "confirmed")
+
+
+class MatchingService:
+    def __init__(self, db_path: str) -> None:
+        self.db_path = db_path
+
+    async def has_active_meeting(self, user_id: int) -> bool:
+        async with aiosqlite.connect(self.db_path) as db:
+            row = await db.execute_fetchone(
+                """
+                SELECT id FROM matches
+                WHERE (user1_id = ? OR user2_id = ?)
+                  AND status IN ('pending_confirm', 'confirmed')
+                LIMIT 1
+                """,
+                (user_id, user_id),
+            )
+            return row is not None
+
+    async def next_candidate(self, user_id: int, city: str) -> dict | None:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            row = await db.execute_fetchone(
+                """
+                SELECT u.id, u.tg_id, u.name, u.age, u.gender, u.city, u.photo_file_id
+                FROM users u
+                WHERE u.id != ?
+                  AND u.city = ?
+                  AND u.is_blocked = 0
+                  AND u.id NOT IN (SELECT liked_id FROM likes WHERE liker_id = ?)
+                  AND u.id NOT IN (
+                    SELECT CASE WHEN m.user1_id = ? THEN m.user2_id ELSE m.user1_id END
+                    FROM matches m
+                    WHERE (m.user1_id = ? OR m.user2_id = ?)
+                  )
+                ORDER BY RANDOM()
+                LIMIT 1
+                """,
+                (user_id, city, user_id, user_id, user_id, user_id),
+            )
+            return dict(row) if row else None
+
+    async def save_like_and_try_match(self, liker_id: int, liked_id: int) -> dict | None:
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("INSERT OR IGNORE INTO likes(liker_id, liked_id) VALUES (?, ?)", (liker_id, liked_id))
+            reciprocal = await db.execute_fetchone(
+                "SELECT id FROM likes WHERE liker_id = ? AND liked_id = ?",
+                (liked_id, liker_id),
+            )
+            if not reciprocal:
+                await db.commit()
+                return None
+
+            active_liker = await db.execute_fetchone(
+                "SELECT id FROM matches WHERE (user1_id=? OR user2_id=?) AND status IN ('pending_confirm','confirmed')",
+                (liker_id, liker_id),
+            )
+            active_liked = await db.execute_fetchone(
+                "SELECT id FROM matches WHERE (user1_id=? OR user2_id=?) AND status IN ('pending_confirm','confirmed')",
+                (liked_id, liked_id),
+            )
+            if active_liker or active_liked:
+                await db.commit()
+                return {"reason": "active_meeting"}
+
+            now = datetime.now(UTC)
+            confirm_deadline = now + timedelta(hours=24)
+            meetup_time = now + timedelta(hours=6)
+            meetup_place = "Кофейня в центре"
+
+            cursor = await db.execute(
+                """
+                INSERT INTO matches(user1_id, user2_id, status, confirm_deadline, meetup_time, meetup_place)
+                VALUES (?, ?, 'pending_confirm', ?, ?, ?)
+                """,
+                (liker_id, liked_id, confirm_deadline.isoformat(), meetup_time.isoformat(), meetup_place),
+            )
+            await db.commit()
+            return {
+                "id": cursor.lastrowid,
+                "user1_id": liker_id,
+                "user2_id": liked_id,
+                "confirm_deadline": confirm_deadline.isoformat(),
+                "meetup_time": meetup_time.isoformat(),
+                "meetup_place": meetup_place,
+            }
+
+    async def list_matches(self, limit: int = 50) -> list[dict]:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            rows = await db.execute_fetchall(
+                "SELECT id, user1_id, user2_id, status, meetup_time, meetup_place FROM matches ORDER BY id DESC LIMIT ?",
+                (limit,),
+            )
+            return [dict(row) for row in rows]
