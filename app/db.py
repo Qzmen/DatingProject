@@ -1,4 +1,5 @@
 import aiosqlite
+from app.utils.city import normalize_city_for_search
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS users (
@@ -9,6 +10,7 @@ CREATE TABLE IF NOT EXISTS users (
     age INTEGER NOT NULL,
     gender TEXT NOT NULL,
     city TEXT NOT NULL,
+    city_normalized TEXT NOT NULL DEFAULT "",
     bio TEXT NOT NULL DEFAULT "",
     description TEXT NOT NULL DEFAULT "",
     photo_file_id TEXT,
@@ -74,6 +76,8 @@ CREATE TABLE IF NOT EXISTS user_gallery (
     file_id TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_users_city_normalized ON users(city_normalized);
 """
 
 
@@ -86,6 +90,14 @@ async def init_db(database_url: str) -> None:
             await db.execute("ALTER TABLE users ADD COLUMN username TEXT")
         if "prefer_same_city" not in cols:
             await db.execute("ALTER TABLE users ADD COLUMN prefer_same_city INTEGER NOT NULL DEFAULT 1")
+        if "city_normalized" not in cols:
+            await db.execute("ALTER TABLE users ADD COLUMN city_normalized TEXT NOT NULL DEFAULT ''")
+        async with db.execute("SELECT id, city, city_normalized FROM users") as cur:
+            users = await cur.fetchall()
+        for user_id, city, city_normalized in users:
+            if not city_normalized:
+                await db.execute("UPDATE users SET city_normalized=? WHERE id=?", (normalize_city_for_search(city or ""), user_id))
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_users_city_normalized ON users(city_normalized)")
         async with db.execute("PRAGMA table_info(matches)") as cur:
             m_cols = {row[1] for row in await cur.fetchall()}
         if "round_started_at" not in m_cols:

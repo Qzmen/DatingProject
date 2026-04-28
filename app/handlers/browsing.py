@@ -5,6 +5,7 @@ from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
 
 from app.keyboards import BTN_BROWSE, browse_keyboard, incoming_like_keyboard
+from app.utils.city import normalize_city_for_search
 
 router = Router()
 
@@ -17,7 +18,11 @@ async def browse(message: Message) -> None:
     if not me:
         await message.answer("Сначала /start")
         return
-    candidate = await message.bot.matching_service.next_candidate(me["id"], me["city"], bool(me.get("prefer_same_city", 1)))
+    candidate = await message.bot.matching_service.next_candidate(
+        me["id"],
+        me.get("city_normalized") or normalize_city_for_search(me.get("city") or ""),
+        bool(me.get("prefer_same_city", 1)),
+    )
     if not candidate:
         await message.answer("Пока нет анкет.")
         return
@@ -31,7 +36,11 @@ async def skip_candidate(callback: CallbackQuery) -> None:
         await callback.message.edit_reply_markup(reply_markup=None)
     fake_message = callback.message
     me = await callback.bot.matching_service.get_user_by_tg(callback.from_user.id)
-    candidate = await callback.bot.matching_service.next_candidate(me["id"], me["city"], bool(me.get("prefer_same_city", 1)))
+    candidate = await callback.bot.matching_service.next_candidate(
+        me["id"],
+        me.get("city_normalized") or normalize_city_for_search(me.get("city") or ""),
+        bool(me.get("prefer_same_city", 1)),
+    )
     if not candidate:
         await fake_message.answer("Пока нет анкет.")
         return
@@ -59,7 +68,11 @@ async def like_candidate(callback: CallbackQuery) -> None:
                     u["tg_id"],
                     "🎉 У вас взаимная симпатия!\n🎲 Предложить игру знакомства через /matches",
                 )
-    candidate = await callback.bot.matching_service.next_candidate(me["id"], me["city"], bool(me.get("prefer_same_city", 1)))
+    candidate = await callback.bot.matching_service.next_candidate(
+        me["id"],
+        me.get("city_normalized") or normalize_city_for_search(me.get("city") or ""),
+        bool(me.get("prefer_same_city", 1)),
+    )
     if not candidate:
         await callback.message.answer("Пока нет анкет.")
         return

@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS users (
     age INTEGER NOT NULL,
     gender TEXT NOT NULL,
     city TEXT NOT NULL,
+    city_normalized TEXT NOT NULL DEFAULT "",
     bio TEXT NOT NULL DEFAULT "",
     description TEXT NOT NULL DEFAULT "",
     photo_file_id TEXT,
@@ -71,3 +72,5 @@ CREATE TABLE IF NOT EXISTS user_gallery (
     file_id TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_users_city_normalized ON users(city_normalized);

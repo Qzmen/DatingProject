@@ -6,7 +6,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from app.keyboards import (
-    BTN_BACK,
     BTN_CITY_FILTER,
     BTN_PROFILE,
     BTN_SETTINGS,
@@ -17,6 +16,7 @@ from app.keyboards import (
     skip_keyboard,
 )
 from app.states import RegistrationStates
+from app.utils.city import format_city_for_display, normalize_city_for_search
 
 router = Router()
 
@@ -84,14 +84,16 @@ async def save_gender(message: Message, state: FSMContext) -> None:
 
 @router.message(RegistrationStates.waiting_city)
 async def save_city(message: Message, state: FSMContext) -> None:
-    city = (message.text or "").strip()
+    raw_city = (message.text or "").strip()
+    city = format_city_for_display(raw_city)
+    city_normalized = normalize_city_for_search(raw_city)
     if not re.fullmatch(r"[A-Za-zА-Яа-яЁё\-\s]{2,40}", city):
         await message.answer("Город должен быть от 2 до 40 символов и содержать только буквы.")
         return
     if not _looks_like_human_text(city):
         await message.answer("Название города выглядит некорректно. Введи реальный город.")
         return
-    await state.update_data(city=city)
+    await state.update_data(city=city, city_normalized=city_normalized)
     await state.set_state(RegistrationStates.waiting_bio)
     await message.answer("Расскажи немного о себе. (до 500 символов)")
 
@@ -228,6 +230,7 @@ async def _finish(message: Message, state: FSMContext, video_note_file_id: str |
         age=data["age"],
         gender=data["gender"],
         city=data["city"],
+        city_normalized=data["city_normalized"],
         description=data["description"],
         photo_file_id=data.get("photo_file_id"),
         voice_file_id=data.get("voice_file_id"),

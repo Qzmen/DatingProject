@@ -64,7 +64,7 @@ class MatchingService:
                 row = await cur.fetchone()
             return dict(row) if row else None
 
-    async def next_candidate(self, user_id: int, city: str, same_city_only: bool = True) -> dict | None:
+    async def next_candidate(self, user_id: int, city_normalized: str, same_city_only: bool = True) -> dict | None:
         placeholders = ",".join("?" for _ in ACTIVE_BROWSE_BLOCK_STATUSES)
         params: list[object] = [user_id]
         query = f"""
@@ -82,8 +82,10 @@ class MatchingService:
         """
         params.extend([user_id, user_id, *ACTIVE_BROWSE_BLOCK_STATUSES])
         if same_city_only:
-            query += " AND candidate.city = ?"
-            params.append(city)
+            query += """
+            AND COALESCE(NULLIF(candidate.city_normalized, ''), lower(replace(trim(candidate.city), 'ё', 'е'))) = ?
+            """
+            params.append(city_normalized)
         query += " ORDER BY RANDOM() LIMIT 1"
 
         async with aiosqlite.connect(self.db_path) as db:

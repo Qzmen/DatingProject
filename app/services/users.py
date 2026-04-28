@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import aiosqlite
+from app.utils.city import normalize_city_for_search
 
 
 class UserService:
@@ -30,6 +31,7 @@ class UserService:
         age: int,
         gender: str,
         city: str,
+        city_normalized: str | None,
         description: str,
         photo_file_id: str | None,
         voice_file_id: str | None,
@@ -38,21 +40,36 @@ class UserService:
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute(
                 """
-                INSERT INTO users (tg_id, username, name, age, gender, city, bio, description, photo_file_id, voice_file_id, video_note_file_id, stars_balance)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO users (tg_id, username, name, age, gender, city, city_normalized, bio, description, photo_file_id, voice_file_id, video_note_file_id, stars_balance)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(tg_id) DO UPDATE SET
                     username=excluded.username,
                     name=excluded.name,
                     age=excluded.age,
                     gender=excluded.gender,
                     city=excluded.city,
+                    city_normalized=excluded.city_normalized,
                     bio=excluded.bio,
                     description=excluded.description,
                     photo_file_id=excluded.photo_file_id,
                     voice_file_id=excluded.voice_file_id,
                     video_note_file_id=excluded.video_note_file_id
                 """,
-                (tg_id, username, name, age, gender, city, description, description, photo_file_id, voice_file_id, video_note_file_id, self.default_stars_balance),
+                (
+                    tg_id,
+                    username,
+                    name,
+                    age,
+                    gender,
+                    city,
+                    city_normalized or normalize_city_for_search(city),
+                    description,
+                    description,
+                    photo_file_id,
+                    voice_file_id,
+                    video_note_file_id,
+                    self.default_stars_balance,
+                ),
             )
             if photo_file_id:
                 async with db.execute("SELECT id FROM users WHERE tg_id = ?", (tg_id,)) as cursor:
