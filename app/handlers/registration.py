@@ -6,11 +6,14 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from app.keyboards import (
+    BTN_BACK,
     BTN_CITY_FILTER,
     BTN_PROFILE,
+    BTN_SETTINGS,
     BTN_SKIP,
     gender_keyboard,
     main_menu_keyboard,
+    settings_keyboard,
     skip_keyboard,
 )
 from app.states import RegistrationStates
@@ -190,9 +193,19 @@ async def profile(message: Message) -> None:
     if me.get("video_note_file_id"):
         await message.answer("🎥 Твой кружок")
         await message.answer_video_note(me["video_note_file_id"])
+    await message.answer("◀️ Нажми «Назад», чтобы вернуться в главное меню.")
 
 
-@router.message(F.text == BTN_CITY_FILTER)
+@router.message(F.text == BTN_SETTINGS)
+async def open_settings(message: Message) -> None:
+    me = await message.bot.user_service.get_by_tg_id(message.from_user.id)
+    if not me:
+        await message.answer("Сначала /start")
+        return
+    await message.answer("⚙️ Настройки", reply_markup=settings_keyboard(bool(me.get("prefer_same_city", 1))))
+
+
+@router.message(F.text.startswith(BTN_CITY_FILTER))
 async def toggle_city_filter(message: Message) -> None:
     me = await message.bot.user_service.get_by_tg_id(message.from_user.id)
     if not me:
@@ -202,6 +215,13 @@ async def toggle_city_filter(message: Message) -> None:
     await message.bot.user_service.set_prefer_same_city(message.from_user.id, enabled)
     status = "включена" if enabled else "выключена"
     await message.answer(f"Фильтрация по городам {status}.")
+    me = await message.bot.user_service.get_by_tg_id(message.from_user.id)
+    await message.answer("⚙️ Настройки", reply_markup=settings_keyboard(bool(me.get("prefer_same_city", 1))))
+
+
+@router.message(F.text == BTN_BACK)
+async def back_to_main_menu(message: Message) -> None:
+    await message.answer("Главное меню", reply_markup=main_menu_keyboard())
 
 
 async def _finish(message: Message, state: FSMContext, video_note_file_id: str | None) -> None:

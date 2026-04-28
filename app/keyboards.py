@@ -1,17 +1,25 @@
-from aiogram.types import (
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    KeyboardButton,
-    ReplyKeyboardMarkup,
-)
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 
-BTN_BROWSE = "🔥 Смотреть анкеты"
-BTN_MATCHES = "💘 Мои матчи"
-BTN_GAME = "🎮 Активная игра"
-BTN_PROFILE = "👤 Мой профиль"
-BTN_STOP_GAME = "🛑 Завершить игру"
+BTN_BROWSE = "🔍 Смотреть анкеты"
+BTN_MATCHES = "💞 Мои матчи"
+BTN_PROFILE = "👤 Моя анкета"
+BTN_SETTINGS = "⚙️ Настройки"
+BTN_BACK = "◀️ Назад"
 BTN_SKIP = "Пропустить"
 BTN_CITY_FILTER = "🌍 Фильтр по городу"
+
+BTN_END_GAME = "❌ Завершить игру"
+BTN_REFRESH = "🔄 Обновить статус"
+BTN_NEXT_ROUND = "🔥 Следующий раунд"
+BTN_REVEAL_CONTACT = "🔓 Раскрыть контакт"
+BTN_ADDITIONAL = "🎲 Дополнительно"
+BTN_CHALLENGE = "🎯 Челлендж дня"
+BTN_DICE = "🎲 Игра в кубик"
+
+BTN_MATCH_PROPOSE = "🎲 Предложить игру"
+BTN_MATCH_CONTINUE = "▶️ Продолжить игру"
+BTN_MATCH_REVEAL = "🔓 Раскрыть контакт"
+BTN_MATCH_CLOSE = "❌ Закрыть матч"
 
 
 def browse_keyboard(candidate_id: int) -> InlineKeyboardMarkup:
@@ -27,28 +35,75 @@ def main_menu_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text=BTN_BROWSE), KeyboardButton(text=BTN_MATCHES)],
-            [KeyboardButton(text=BTN_GAME), KeyboardButton(text=BTN_PROFILE)],
-            [KeyboardButton(text=BTN_CITY_FILTER), KeyboardButton(text=BTN_STOP_GAME)],
+            [KeyboardButton(text=BTN_PROFILE), KeyboardButton(text=BTN_SETTINGS)],
         ],
         resize_keyboard=True,
-        input_field_placeholder="Выбери действие 👇",
+        input_field_placeholder="Выбери действие",
+    )
+
+
+def game_waiting_answer_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=BTN_END_GAME)], [KeyboardButton(text=BTN_BACK)]],
+        resize_keyboard=True,
+        input_field_placeholder="Отправь ответ сообщением",
+    )
+
+
+def game_waiting_partner_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=BTN_REFRESH), KeyboardButton(text=BTN_END_GAME)], [KeyboardButton(text=BTN_BACK)]],
+        resize_keyboard=True,
+        input_field_placeholder="Ждём ответ партнёра",
+    )
+
+
+def game_round_finished_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=BTN_NEXT_ROUND), KeyboardButton(text=BTN_REVEAL_CONTACT)],
+            [KeyboardButton(text=BTN_ADDITIONAL), KeyboardButton(text=BTN_END_GAME)],
+            [KeyboardButton(text=BTN_BACK)],
+        ],
+        resize_keyboard=True,
+        input_field_placeholder="Раунд завершён",
+    )
+
+
+def matches_menu_keyboard(status: str) -> ReplyKeyboardMarkup:
+    rows: list[list[KeyboardButton]] = []
+    if status in {"matched", "game_declined", "game_invited"}:
+        rows.append([KeyboardButton(text=BTN_MATCH_PROPOSE)])
+    if status == "game_active":
+        rows.append([KeyboardButton(text=BTN_MATCH_CONTINUE), KeyboardButton(text=BTN_MATCH_REVEAL)])
+    rows.append([KeyboardButton(text=BTN_MATCH_CLOSE), KeyboardButton(text=BTN_BACK)])
+    return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True, input_field_placeholder="Действия по матчу")
+
+
+def additional_game_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=BTN_CHALLENGE), KeyboardButton(text=BTN_DICE)], [KeyboardButton(text=BTN_BACK)]],
+        resize_keyboard=True,
+        input_field_placeholder="Дополнительные активности",
+    )
+
+
+def settings_keyboard(city_filter_enabled: bool) -> ReplyKeyboardMarkup:
+    city_label = f"{BTN_CITY_FILTER}: {'ВКЛ' if city_filter_enabled else 'ВЫКЛ'}"
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=city_label)], [KeyboardButton(text=BTN_BACK)]],
+        resize_keyboard=True,
+        input_field_placeholder="Настройки",
     )
 
 
 def skip_keyboard() -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=BTN_SKIP)]],
-        resize_keyboard=True,
-        one_time_keyboard=True,
-    )
+    return ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text=BTN_SKIP)]], resize_keyboard=True, one_time_keyboard=True)
 
 
 def gender_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="🙋‍♂️ Парень"), KeyboardButton(text="🙋‍♀️ Девушка")],
-            [KeyboardButton(text="✨ Другое")],
-        ],
+        keyboard=[[KeyboardButton(text="🙋‍♂️ Парень"), KeyboardButton(text="🙋‍♀️ Девушка")], [KeyboardButton(text="✨ Другое")]],
         resize_keyboard=True,
         one_time_keyboard=True,
     )
@@ -63,50 +118,29 @@ def incoming_like_keyboard(liker_id: int) -> InlineKeyboardMarkup:
     )
 
 
-def match_keyboard(match_id: int, status: str) -> InlineKeyboardMarkup:
-    rows: list[list[InlineKeyboardButton]] = []
-    if status in {"matched", "game_declined"}:
-        rows.append([InlineKeyboardButton(text="🎲 Предложить игру знакомства", callback_data=f"propose_game:{match_id}")])
-    if status == "game_active":
-        rows.append([InlineKeyboardButton(text="▶️ Продолжить игру", callback_data=f"continue_game:{match_id}")])
-        rows.append([InlineKeyboardButton(text="🔓 Предложить раскрыть контакт", callback_data=f"reveal_contact:{match_id}")])
-    rows.append([InlineKeyboardButton(text="❌ Закрыть матч", callback_data=f"close_match:{match_id}")])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
-
-
-def game_invite_keyboard(match_id: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="✅ Принять", callback_data=f"accept_game:{match_id}"),
-        InlineKeyboardButton(text="❌ Отказаться", callback_data=f"decline_game:{match_id}"),
-    ]])
-
-
-def game_round_keyboard(match_id: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🫶 Парный челлендж дня", callback_data=f"daily_challenge:{match_id}")],
-        [InlineKeyboardButton(text="🎲 Игра в кубик", callback_data=f"dice_game:{match_id}")],
-        [InlineKeyboardButton(text="🔥 Следующий раунд", callback_data=f"next_round:{match_id}")],
-        [InlineKeyboardButton(text="🔓 Предложить раскрыть контакт", callback_data=f"reveal_contact:{match_id}")],
-        [InlineKeyboardButton(text="❌ Завершить игру", callback_data=f"close_match:{match_id}")],
-    ])
-
-
-def challenge_keyboard(match_id: int) -> InlineKeyboardMarkup:
+def game_invite_inline_keyboard(match_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="✅ Челлендж выполнен", callback_data=f"complete_challenge:{match_id}")],
-            [InlineKeyboardButton(text="🔄 Новый челлендж", callback_data=f"daily_challenge:{match_id}")],
-        ]
+        inline_keyboard=[[
+            InlineKeyboardButton(text="✅ Принять", callback_data=f"accept_game:{match_id}"),
+            InlineKeyboardButton(text="❌ Отказаться", callback_data=f"decline_game:{match_id}"),
+        ]]
     )
 
 
-def contact_reveal_keyboard(match_id: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="✅ Да, раскрыть контакт", callback_data=f"accept_reveal:{match_id}"),
-        InlineKeyboardButton(text="❌ Нет, продолжить игру", callback_data=f"decline_reveal:{match_id}"),
-    ]])
-
-
-def match_list_keyboard(matches: list[dict]) -> InlineKeyboardMarkup:
+def match_select_inline_keyboard(matches: list[dict]) -> InlineKeyboardMarkup:
     rows = [[InlineKeyboardButton(text=f"{m['partner_name']} • {m['status_ru']}", callback_data=f"match:{m['id']}")] for m in matches[:20]]
     return InlineKeyboardMarkup(inline_keyboard=rows or [[InlineKeyboardButton(text="Пусто", callback_data="noop")]])
+
+
+def reveal_contact_inline_keyboard(match_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[
+            InlineKeyboardButton(text="✅ Да, раскрыть контакт", callback_data=f"accept_reveal:{match_id}"),
+            InlineKeyboardButton(text="❌ Нет, продолжить игру", callback_data=f"decline_reveal:{match_id}"),
+        ]]
+    )
+
+
+def choice_answer_inline_keyboard(match_id: int, options: list[str]) -> InlineKeyboardMarkup:
+    rows = [[InlineKeyboardButton(text=o, callback_data=f"choice_answer:{match_id}:{idx}")] for idx, o in enumerate(options[:5])]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
