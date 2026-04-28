@@ -17,6 +17,22 @@ from app.states import RegistrationStates
 router = Router()
 
 
+def _looks_like_human_text(value: str) -> bool:
+    cleaned = value.strip()
+    if len(cleaned) < 2:
+        return False
+    if re.search(r"(.)\1\1", cleaned):
+        return False
+    letters = re.findall(r"[A-Za-zА-Яа-яЁё]", cleaned)
+    if not letters:
+        return False
+    vowels = re.findall(r"[AEIOUYaeiouyАЕЁИОУЫЭЮЯаеёиоуыэюя]", cleaned)
+    if len(vowels) < 1:
+        return False
+    unique_ratio = len(set(ch.lower() for ch in letters)) / len(letters)
+    return unique_ratio >= 0.35
+
+
 @router.message(Command("start"))
 async def start_registration(message: Message, state: FSMContext) -> None:
     me = await message.bot.user_service.get_by_tg_id(message.from_user.id)
@@ -32,6 +48,9 @@ async def save_name(message: Message, state: FSMContext) -> None:
     name = (message.text or "").strip()
     if not re.fullmatch(r"[A-Za-zА-Яа-яЁё\-\s]{2,30}", name):
         await message.answer("Имя должно быть 2-30 символов и состоять из букв.")
+        return
+    if not _looks_like_human_text(name):
+        await message.answer("Похоже на случайный набор символов. Введи, пожалуйста, настоящее имя.")
         return
     await state.update_data(name=name)
     await state.set_state(RegistrationStates.waiting_age)
@@ -61,8 +80,11 @@ async def save_gender(message: Message, state: FSMContext) -> None:
 @router.message(RegistrationStates.waiting_city)
 async def save_city(message: Message, state: FSMContext) -> None:
     city = (message.text or "").strip()
-    if len(city) < 2:
-        await message.answer("Укажи город корректно.")
+    if not re.fullmatch(r"[A-Za-zА-Яа-яЁё\-\s]{2,40}", city):
+        await message.answer("Город должен быть от 2 до 40 символов и содержать только буквы.")
+        return
+    if not _looks_like_human_text(city):
+        await message.answer("Название города выглядит некорректно. Введи реальный город.")
         return
     await state.update_data(city=city)
     await state.set_state(RegistrationStates.waiting_bio)

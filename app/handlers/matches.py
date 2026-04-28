@@ -72,7 +72,8 @@ async def propose_game(callback: CallbackQuery) -> None:
             if u["id"] != me["id"]:
                 await callback.bot.send_message(
                     u["tg_id"],
-                    "Твой матч предлагает начать игру знакомства.\nЭто короткие раунды с голосовыми, кружками и ответами на вопросы. Контакты не раскрываются.",
+                    f"🎲 {me['name']} предлагает начать игру знакомства.\n"
+                    "Это короткие раунды с голосовыми, кружками и ответами на вопросы. Контакты не раскрываются.",
                     reply_markup=game_invite_keyboard(match_id),
                 )
 
@@ -238,8 +239,13 @@ async def accept_reveal(callback: CallbackQuery) -> None:
     if users:
         for u in users:
             other = users[0] if users[1]["id"] == u["id"] else users[1]
-            contact = f"@{other['username']}" if other.get("username") else str(other["tg_id"])
-            await callback.bot.send_message(u["tg_id"], f"Контакт раскрыт: {contact}")
+            if other.get("username"):
+                await callback.bot.send_message(u["tg_id"], f"Контакт раскрыт: @{other['username']}")
+            else:
+                await callback.bot.send_message(
+                    u["tg_id"],
+                    "Контакт пока нельзя показать: у пользователя не установлен @username в Telegram.",
+                )
     await callback.answer("Контакт раскрыт")
 
 
