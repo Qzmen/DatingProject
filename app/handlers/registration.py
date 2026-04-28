@@ -219,11 +219,6 @@ async def toggle_city_filter(message: Message) -> None:
     await message.answer("⚙️ Настройки", reply_markup=settings_keyboard(bool(me.get("prefer_same_city", 1))))
 
 
-@router.message(F.text == BTN_BACK)
-async def back_to_main_menu(message: Message) -> None:
-    await message.answer("Главное меню", reply_markup=main_menu_keyboard())
-
-
 async def _finish(message: Message, state: FSMContext, video_note_file_id: str | None) -> None:
     data = await state.get_data()
     await message.bot.user_service.create_or_update(

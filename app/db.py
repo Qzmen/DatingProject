@@ -41,6 +41,8 @@ CREATE TABLE IF NOT EXISTS matches (
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     game_round INTEGER NOT NULL DEFAULT 0,
     game_prompt TEXT,
+    expected_answer_type TEXT NOT NULL DEFAULT 'text',
+    choice_options TEXT,
     round_started_at TEXT,
     round_expires_at TEXT,
     game_invited_by INTEGER,
@@ -62,6 +64,7 @@ CREATE TABLE IF NOT EXISTS match_messages (
     text TEXT,
     file_id TEXT,
     prompt TEXT,
+    delivered_to_partner INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -89,6 +92,10 @@ async def init_db(database_url: str) -> None:
             await db.execute("ALTER TABLE matches ADD COLUMN round_started_at TEXT")
         if "round_expires_at" not in m_cols:
             await db.execute("ALTER TABLE matches ADD COLUMN round_expires_at TEXT")
+        if "expected_answer_type" not in m_cols:
+            await db.execute("ALTER TABLE matches ADD COLUMN expected_answer_type TEXT NOT NULL DEFAULT 'text'")
+        if "choice_options" not in m_cols:
+            await db.execute("ALTER TABLE matches ADD COLUMN choice_options TEXT")
         if "challenge_text" not in m_cols:
             await db.execute("ALTER TABLE matches ADD COLUMN challenge_text TEXT")
         if "challenge_expires_at" not in m_cols:
@@ -103,4 +110,8 @@ async def init_db(database_url: str) -> None:
             await db.execute(
                 "CREATE TABLE user_gallery (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, file_id TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
             )
+        async with db.execute("PRAGMA table_info(match_messages)") as cur:
+            mm_cols = {row[1] for row in await cur.fetchall()}
+        if "delivered_to_partner" not in mm_cols:
+            await db.execute("ALTER TABLE match_messages ADD COLUMN delivered_to_partner INTEGER NOT NULL DEFAULT 0")
         await db.commit()

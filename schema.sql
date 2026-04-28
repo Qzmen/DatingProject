@@ -38,6 +38,8 @@ CREATE TABLE IF NOT EXISTS matches (
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     game_round INTEGER NOT NULL DEFAULT 0,
     game_prompt TEXT,
+    expected_answer_type TEXT NOT NULL DEFAULT 'text',
+    choice_options TEXT,
     round_started_at TEXT,
     round_expires_at TEXT,
     game_invited_by INTEGER,
@@ -59,6 +61,7 @@ CREATE TABLE IF NOT EXISTS match_messages (
     text TEXT,
     file_id TEXT,
     prompt TEXT,
+    delivered_to_partner INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
