@@ -6,7 +6,7 @@ router = Router()
 
 
 def _is_admin(message: Message) -> bool:
-    settings = message.bot["settings"]
+    settings = message.bot.settings
     return message.from_user.id in settings.admin_id_set
 
 
@@ -15,13 +15,13 @@ async def admin_users(message: Message) -> None:
     if not _is_admin(message):
         await message.answer("Недостаточно прав")
         return
-    user_service = message.bot["user_service"]
+    user_service = message.bot.user_service
     users = await user_service.list_users()
     if not users:
         await message.answer("Пользователей нет")
         return
     lines = [
-        f"{u['tg_id']} | {u['name']} | {u['age']} | {u['city']} | rating {u['rating_score']}/{u['rating_count']} | blocked={u['is_blocked']}"
+        f"{u['tg_id']} | {u['name']} | {u['age']} | {u['city']} | rating {u['rating_score']}/{u['rating_count']} | blocked={u['is_blocked']} | enabled={u['is_profile_enabled']}"
         for u in users
     ]
     await message.answer("\n".join(lines[:30]))
@@ -32,7 +32,7 @@ async def admin_matches(message: Message) -> None:
     if not _is_admin(message):
         await message.answer("Недостаточно прав")
         return
-    matching_service = message.bot["matching_service"]
+    matching_service = message.bot.matching_service
     matches = await matching_service.list_matches()
     if not matches:
         await message.answer("Матчей нет")
@@ -54,6 +54,6 @@ async def admin_block(message: Message) -> None:
         await message.answer("Использование: /block <tg_id>")
         return
     tg_id = int(parts[1])
-    user_service = message.bot["user_service"]
+    user_service = message.bot.user_service
     ok = await user_service.block_user(tg_id)
     await message.answer("Пользователь заблокирован" if ok else "Пользователь не найден")
