@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     tg_id INTEGER UNIQUE NOT NULL,
+    username TEXT,
     name TEXT NOT NULL,
     age INTEGER NOT NULL,
     gender TEXT NOT NULL,
@@ -16,6 +17,7 @@ CREATE TABLE IF NOT EXISTS users (
     rating_count INTEGER NOT NULL DEFAULT 0,
     is_blocked INTEGER NOT NULL DEFAULT 0,
     is_profile_enabled INTEGER NOT NULL DEFAULT 1,
+    prefer_same_city INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -51,5 +53,12 @@ CREATE TABLE IF NOT EXISTS match_messages (
     text TEXT,
     file_id TEXT,
     prompt TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS user_gallery (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    file_id TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

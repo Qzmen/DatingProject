@@ -6,6 +6,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from app.keyboards import (
+    BTN_CITY_FILTER,
     BTN_PROFILE,
     BTN_SKIP,
     gender_keyboard,
@@ -37,6 +38,7 @@ def _looks_like_human_text(value: str) -> bool:
 async def start_registration(message: Message, state: FSMContext) -> None:
     me = await message.bot.user_service.get_by_tg_id(message.from_user.id)
     if me:
+        await message.bot.user_service.touch_username(message.from_user.id, message.from_user.username)
         await message.answer("Главное меню 💫", reply_markup=main_menu_keyboard())
         return
     await state.set_state(RegistrationStates.waiting_name)
@@ -148,6 +150,10 @@ async def only_voice(message: Message) -> None:
 @router.message(RegistrationStates.waiting_video_note, Command("skip_video_note"))
 @router.message(RegistrationStates.waiting_video_note, F.text == BTN_SKIP)
 async def finish_skip_video(message: Message, state: FSMContext) -> None:
+    data = await state.get_data()
+    if not data.get("photo_file_id"):
+        await message.answer("Нужно хотя бы фото или кружок. Пришли кружок для завершения регистрации.")
+        return
     await _finish(message, state, None)
 
 
@@ -186,10 +192,23 @@ async def profile(message: Message) -> None:
         await message.answer_video_note(me["video_note_file_id"])
 
 
+@router.message(F.text == BTN_CITY_FILTER)
+async def toggle_city_filter(message: Message) -> None:
+    me = await message.bot.user_service.get_by_tg_id(message.from_user.id)
+    if not me:
+        await message.answer("Сначала /start")
+        return
+    enabled = not bool(me.get("prefer_same_city", 1))
+    await message.bot.user_service.set_prefer_same_city(message.from_user.id, enabled)
+    status = "включена" if enabled else "выключена"
+    await message.answer(f"Фильтрация по городам {status}.")
+
+
 async def _finish(message: Message, state: FSMContext, video_note_file_id: str | None) -> None:
     data = await state.get_data()
     await message.bot.user_service.create_or_update(
         tg_id=message.from_user.id,
+        username=message.from_user.username,
         name=data["name"],
         age=data["age"],
         gender=data["gender"],

@@ -74,19 +74,21 @@ class MatchingService:
                 row = await cur.fetchone()
             return dict(row) if row else None
 
-    async def next_candidate(self, user_id: int, city: str) -> dict | None:
+    async def next_candidate(self, user_id: int, city: str, same_city_only: bool = True) -> dict | None:
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
-            async with db.execute(
-                """
+            query = """
                 SELECT id, tg_id, name, age, city, description, photo_file_id, voice_file_id, video_note_file_id, reputation_score
                 FROM users
-                WHERE id != ? AND city = ? AND is_blocked = 0 AND is_profile_enabled = 1
+                WHERE id != ? AND is_blocked = 0 AND is_profile_enabled = 1
                   AND id NOT IN (SELECT liked_id FROM likes WHERE liker_id = ?)
-                ORDER BY RANDOM() LIMIT 1
-                """,
-                (user_id, city, user_id),
-            ) as cur:
+            """
+            params: tuple = (user_id, user_id)
+            if same_city_only:
+                query += " AND city = ? "
+                params = (user_id, user_id, city)
+            query += " ORDER BY RANDOM() LIMIT 1 "
+            async with db.execute(query, params) as cur:
                 row = await cur.fetchone()
             return dict(row) if row else None
 

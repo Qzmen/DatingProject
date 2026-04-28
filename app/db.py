@@ -4,6 +4,7 @@ SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     tg_id INTEGER UNIQUE NOT NULL,
+    username TEXT,
     name TEXT NOT NULL,
     age INTEGER NOT NULL,
     gender TEXT NOT NULL,
@@ -19,6 +20,7 @@ CREATE TABLE IF NOT EXISTS users (
     rating_count INTEGER NOT NULL DEFAULT 0,
     is_blocked INTEGER NOT NULL DEFAULT 0,
     is_profile_enabled INTEGER NOT NULL DEFAULT 1,
+    prefer_same_city INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -56,10 +58,29 @@ CREATE TABLE IF NOT EXISTS match_messages (
     prompt TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS user_gallery (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    file_id TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 """
 
 
 async def init_db(database_url: str) -> None:
     async with aiosqlite.connect(database_url) as db:
         await db.executescript(SCHEMA_SQL)
+        async with db.execute("PRAGMA table_info(users)") as cur:
+            cols = {row[1] for row in await cur.fetchall()}
+        if "username" not in cols:
+            await db.execute("ALTER TABLE users ADD COLUMN username TEXT")
+        if "prefer_same_city" not in cols:
+            await db.execute("ALTER TABLE users ADD COLUMN prefer_same_city INTEGER NOT NULL DEFAULT 1")
+        async with db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='user_gallery'") as cur:
+            exists = await cur.fetchone()
+        if not exists:
+            await db.execute(
+                "CREATE TABLE user_gallery (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, file_id TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+            )
         await db.commit()

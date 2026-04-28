@@ -12,11 +12,12 @@ router = Router()
 @router.message(Command("browse"))
 @router.message(F.text == BTN_BROWSE)
 async def browse(message: Message) -> None:
+    await message.bot.user_service.touch_username(message.from_user.id, message.from_user.username)
     me = await message.bot.matching_service.get_user_by_tg(message.from_user.id)
     if not me:
         await message.answer("Сначала /start")
         return
-    candidate = await message.bot.matching_service.next_candidate(me["id"], me["city"])
+    candidate = await message.bot.matching_service.next_candidate(me["id"], me["city"], bool(me.get("prefer_same_city", 1)))
     if not candidate:
         await message.answer("Пока нет анкет.")
         return
@@ -30,7 +31,7 @@ async def skip_candidate(callback: CallbackQuery) -> None:
         await callback.message.edit_reply_markup(reply_markup=None)
     fake_message = callback.message
     me = await callback.bot.matching_service.get_user_by_tg(callback.from_user.id)
-    candidate = await callback.bot.matching_service.next_candidate(me["id"], me["city"])
+    candidate = await callback.bot.matching_service.next_candidate(me["id"], me["city"], bool(me.get("prefer_same_city", 1)))
     if not candidate:
         await fake_message.answer("Пока нет анкет.")
         return
@@ -58,7 +59,7 @@ async def like_candidate(callback: CallbackQuery) -> None:
                     u["tg_id"],
                     "🎉 У вас взаимная симпатия!\n🎲 Предложить игру знакомства через /matches",
                 )
-    candidate = await callback.bot.matching_service.next_candidate(me["id"], me["city"])
+    candidate = await callback.bot.matching_service.next_candidate(me["id"], me["city"], bool(me.get("prefer_same_city", 1)))
     if not candidate:
         await callback.message.answer("Пока нет анкет.")
         return

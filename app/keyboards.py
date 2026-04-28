@@ -11,6 +11,7 @@ BTN_GAME = "🎮 Активная игра"
 BTN_PROFILE = "👤 Мой профиль"
 BTN_STOP_GAME = "🛑 Завершить игру"
 BTN_SKIP = "Пропустить"
+BTN_CITY_FILTER = "🌍 Фильтр по городу"
 
 
 def browse_keyboard(candidate_id: int) -> InlineKeyboardMarkup:
@@ -27,7 +28,7 @@ def main_menu_keyboard() -> ReplyKeyboardMarkup:
         keyboard=[
             [KeyboardButton(text=BTN_BROWSE), KeyboardButton(text=BTN_MATCHES)],
             [KeyboardButton(text=BTN_GAME), KeyboardButton(text=BTN_PROFILE)],
-            [KeyboardButton(text=BTN_STOP_GAME)],
+            [KeyboardButton(text=BTN_CITY_FILTER), KeyboardButton(text=BTN_STOP_GAME)],
         ],
         resize_keyboard=True,
         input_field_placeholder="Выбери действие 👇",
@@ -82,11 +83,7 @@ def game_invite_keyboard(match_id: int) -> InlineKeyboardMarkup:
 
 def game_round_keyboard(match_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="💬 Легко отвечаю", callback_data=f"quick_answer:{match_id}:easy"),
-            InlineKeyboardButton(text="😏 С подколом", callback_data=f"quick_answer:{match_id}:tease"),
-        ],
-        [InlineKeyboardButton(text="🫣 Неловко, но честно", callback_data=f"quick_answer:{match_id}:awkward")],
+        [InlineKeyboardButton(text="🎲 Игра в кубик", callback_data=f"dice_game:{match_id}")],
         [InlineKeyboardButton(text="🔥 Следующий раунд", callback_data=f"next_round:{match_id}")],
         [InlineKeyboardButton(text="🔓 Предложить раскрыть контакт", callback_data=f"reveal_contact:{match_id}")],
         [InlineKeyboardButton(text="❌ Завершить игру", callback_data=f"close_match:{match_id}")],

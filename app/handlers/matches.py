@@ -1,3 +1,5 @@
+import random
+
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
@@ -61,9 +63,26 @@ async def _finish_round_if_ready(bot, match_id: int, round_number: int) -> None:
                 )
 
 
+def _expected_round_type(round_number: int) -> str:
+    if round_number % 3 == 2:
+        return "voice"
+    if round_number % 3 == 0:
+        return "video_note"
+    return "text"
+
+
+def _expected_hint(expected_type: str) -> str:
+    if expected_type == "voice":
+        return "В этом раунде нужен голосовой ответ (до 30 секунд)."
+    if expected_type == "video_note":
+        return "В этом раунде нужен кружок (video note)."
+    return "В этом раунде нужен текстовый ответ."
+
+
 @router.message(Command("matches"))
 @router.message(F.text == BTN_MATCHES)
 async def matches(message: Message) -> None:
+    await message.bot.user_service.touch_username(message.from_user.id, message.from_user.username)
     me = await message.bot.matching_service.get_user_by_tg(message.from_user.id)
     if not me:
         await message.answer("Сначала /start")
@@ -158,6 +177,7 @@ async def continue_game(callback: CallbackQuery) -> None:
 @router.message(Command("game"))
 @router.message(F.text == BTN_GAME)
 async def game_command(message: Message) -> None:
+    await message.bot.user_service.touch_username(message.from_user.id, message.from_user.username)
     me = await message.bot.matching_service.get_user_by_tg(message.from_user.id)
     if not me:
         await message.answer("Сначала /start")
@@ -190,7 +210,7 @@ async def stop_game(message: Message) -> None:
     await message.answer("Игра завершена.", reply_markup=main_menu_keyboard())
 
 
-@router.message(F.voice | F.video_note | F.text)
+@router.message(F.voice | F.video_note | F.text | F.photo)
 async def capture_round_answer(message: Message) -> None:
     me = await message.bot.matching_service.get_user_by_tg(message.from_user.id)
     if not me:
@@ -204,25 +224,41 @@ async def capture_round_answer(message: Message) -> None:
         return
     prompt = match.get("game_prompt") or ""
     round_number = int(match.get("game_round") or 1)
+    expected_type = _expected_round_type(round_number)
 
     msg_type = ""
     text = None
     file_id = None
     if message.voice:
+        if expected_type != "voice":
+            await message.answer(_expected_hint(expected_type))
+            return
         if message.voice.duration and message.voice.duration > 30:
             await message.answer("Голосовое должно быть до 30 секунд.")
             return
         msg_type = "voice"
         file_id = message.voice.file_id
     elif message.video_note:
+        if expected_type != "video_note":
+            await message.answer(_expected_hint(expected_type))
+            return
         msg_type = "video_note"
         file_id = message.video_note.file_id
     elif message.text and not message.text.startswith("/"):
+        if expected_type != "text":
+            await message.answer(_expected_hint(expected_type))
+            return
         if len(message.text) > 300:
             await message.answer("Текст должен быть до 300 символов.")
             return
         msg_type = "text"
         text = message.text
+    elif message.photo:
+        if not me:
+            return
+        await message.answer("Фото добавлено в твою галерею для мини-игры 🎲")
+        await message.bot.user_service.add_gallery_photo(me["id"], message.photo[-1].file_id)
+        return
     else:
         return
 
@@ -238,10 +274,9 @@ async def capture_round_answer(message: Message) -> None:
     await _finish_round_if_ready(message.bot, active["id"], round_number)
 
 
-@router.callback_query(F.data.startswith("quick_answer:"))
-async def quick_answer(callback: CallbackQuery) -> None:
-    _, match_id_raw, tone = callback.data.split(":", 2)
-    match_id = int(match_id_raw)
+@router.callback_query(F.data.startswith("dice_game:"))
+async def dice_game(callback: CallbackQuery) -> None:
+    match_id = int(callback.data.split(":", 1)[1])
     me = await callback.bot.matching_service.get_user_by_tg(callback.from_user.id)
     if not me:
         await callback.answer("Сначала /start")
@@ -250,21 +285,37 @@ async def quick_answer(callback: CallbackQuery) -> None:
     if not match or match["status"] != "game_active":
         await callback.answer("Игра не активна", show_alert=True)
         return
-
-    quick_text_map = {
-        "easy": "Легко отвечаю: мне с тобой уже комфортно 😊",
-        "tease": "С подколом: проверяю, насколько ты умеешь держать мой юмор 😏",
-        "awkward": "Неловко, но честно: ты мне интересен(на), хоть я и смущаюсь 🫣",
-    }
-    text = quick_text_map.get(tone)
-    if not text:
-        await callback.answer("Неизвестный формат ответа")
+    users = await callback.bot.matching_service.users_for_match(match_id)
+    if not users:
+        await callback.answer("Не удалось загрузить участников", show_alert=True)
         return
-    round_number = int(match.get("game_round") or 1)
-    prompt = match.get("game_prompt") or ""
-    await callback.bot.matching_service.save_round_answer(match_id, round_number, me["id"], "text", text, None, prompt)
-    await _finish_round_if_ready(callback.bot, match_id, round_number)
-    await callback.answer("Ответ отправлен ✅")
+    other = users[0] if users[1]["id"] == me["id"] else users[1]
+
+    my_roll = random.randint(1, 6)
+    other_roll = random.randint(1, 6)
+    if my_roll == other_roll:
+        await callback.message.answer(f"🎲 Ничья! {me['name']}: {my_roll}, {other['name']}: {other_roll}. Попробуйте ещё раз.")
+        await callback.answer()
+        return
+
+    loser = me if my_roll < other_roll else other
+    winner = other if loser["id"] == me["id"] else me
+    loser_photo = await callback.bot.user_service.random_gallery_photo(loser["id"])
+
+    for u in users:
+        await callback.bot.send_message(
+            u["tg_id"],
+            f"🎲 Кубики: {me['name']} — {my_roll}, {other['name']} — {other_roll}.\n"
+            f"Проиграл(а): {loser['name']}.",
+        )
+    if loser_photo:
+        await callback.bot.send_photo(winner["tg_id"], loser_photo, caption=f"📸 Случайное фото из галереи {loser['name']}")
+    else:
+        await callback.bot.send_message(
+            winner["tg_id"],
+            f"У {loser['name']} пока нет фото в галерее. Попроси отправить фото в чат игры.",
+        )
+    await callback.answer("Кубик брошен")
 
 
 @router.callback_query(F.data.startswith("reveal_contact:"))
@@ -293,8 +344,14 @@ async def accept_reveal(callback: CallbackQuery) -> None:
     if users:
         for u in users:
             other = users[0] if users[1]["id"] == u["id"] else users[1]
-            if other.get("username"):
-                await callback.bot.send_message(u["tg_id"], f"Контакт раскрыт: @{other['username']}")
+            username = other.get("username")
+            if not username:
+                chat = await callback.bot.get_chat(other["tg_id"])
+                username = chat.username
+                if username:
+                    await callback.bot.user_service.touch_username(other["tg_id"], username)
+            if username:
+                await callback.bot.send_message(u["tg_id"], f"Контакт раскрыт: @{username}")
             else:
                 await callback.bot.send_message(
                     u["tg_id"],
