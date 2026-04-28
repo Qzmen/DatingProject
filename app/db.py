@@ -8,11 +8,13 @@ CREATE TABLE IF NOT EXISTS users (
     age INTEGER NOT NULL,
     gender TEXT NOT NULL,
     city TEXT NOT NULL,
+    bio TEXT NOT NULL DEFAULT "",
     photo_file_id TEXT,
     stars_balance INTEGER NOT NULL DEFAULT 100,
     rating_score INTEGER NOT NULL DEFAULT 0,
     rating_count INTEGER NOT NULL DEFAULT 0,
     is_blocked INTEGER NOT NULL DEFAULT 0,
+    is_profile_enabled INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -41,7 +43,11 @@ CREATE TABLE IF NOT EXISTS matches (
     user1_precheck INTEGER,
     user2_precheck INTEGER,
     user1_feedback INTEGER,
-    user2_feedback INTEGER
+    user2_feedback INTEGER,
+    call_requested_by INTEGER,
+    user1_call_accepted INTEGER NOT NULL DEFAULT 0,
+    user2_call_accepted INTEGER NOT NULL DEFAULT 0,
+    call_room_url TEXT
 );
 
 CREATE TABLE IF NOT EXISTS feedback (
@@ -59,4 +65,29 @@ CREATE TABLE IF NOT EXISTS feedback (
 async def init_db(database_url: str) -> None:
     async with aiosqlite.connect(database_url) as db:
         await db.executescript(SCHEMA_SQL)
+        await _ensure_user_columns(db)
+        await _ensure_match_columns(db)
         await db.commit()
+
+
+async def _ensure_user_columns(db: aiosqlite.Connection) -> None:
+    async with db.execute("PRAGMA table_info(users)") as cursor:
+        cols = {row[1] for row in await cursor.fetchall()}
+    if "bio" not in cols:
+        await db.execute("ALTER TABLE users ADD COLUMN bio TEXT NOT NULL DEFAULT ''")
+
+    if "is_profile_enabled" not in cols:
+        await db.execute("ALTER TABLE users ADD COLUMN is_profile_enabled INTEGER NOT NULL DEFAULT 1")
+
+
+async def _ensure_match_columns(db: aiosqlite.Connection) -> None:
+    async with db.execute("PRAGMA table_info(matches)") as cursor:
+        cols = {row[1] for row in await cursor.fetchall()}
+    if "call_requested_by" not in cols:
+        await db.execute("ALTER TABLE matches ADD COLUMN call_requested_by INTEGER")
+    if "user1_call_accepted" not in cols:
+        await db.execute("ALTER TABLE matches ADD COLUMN user1_call_accepted INTEGER NOT NULL DEFAULT 0")
+    if "user2_call_accepted" not in cols:
+        await db.execute("ALTER TABLE matches ADD COLUMN user2_call_accepted INTEGER NOT NULL DEFAULT 0")
+    if "call_room_url" not in cols:
+        await db.execute("ALTER TABLE matches ADD COLUMN call_room_url TEXT")
