@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+import uuid
 
 import aiosqlite
 
@@ -248,7 +249,12 @@ class MeetingService:
                 return False, "Матч для звонка недоступен."
             if user_id not in (match["user1_id"], match["user2_id"]):
                 return False, "Это не ваш матч."
-            await db.execute("UPDATE matches SET call_requested_by = ? WHERE id = ?", (user_id, match_id))
+
+            accept_col = "user1_call_accepted" if user_id == match["user1_id"] else "user2_call_accepted"
+            await db.execute(
+                f"UPDATE matches SET call_requested_by = ?, {accept_col} = 1 WHERE id = ?",
+                (user_id, match_id),
+            )
             await db.commit()
             return True, "Запрос на звонок отправлен."
 
@@ -280,12 +286,13 @@ class MeetingService:
             )
             if refreshed and refreshed["user1_call_accepted"] and refreshed["user2_call_accepted"]:
                 confirm_deadline = (datetime.now(UTC) + timedelta(hours=24)).isoformat()
+                call_room_url = self._build_call_link(match_id)
                 await db.execute(
-                    "UPDATE matches SET status = 'pending_confirm', confirm_deadline = ? WHERE id = ?",
-                    (confirm_deadline, match_id),
+                    "UPDATE matches SET status = 'pending_confirm', confirm_deadline = ?, call_room_url = ? WHERE id = ?",
+                    (confirm_deadline, call_room_url, match_id),
                 )
                 await db.commit()
-                return True, "Звонок согласован. Теперь можно предложить встречу."
+                return True, "Звонок согласован. Ссылка на конференцию создана."
 
             await db.commit()
             return True, "Ожидаем подтверждение звонка от второго участника."
@@ -350,6 +357,10 @@ class MeetingService:
                 (now, user_id, user_id, user_id, user_id),
             )
             return dict(row) if row else None
+
+    def _build_call_link(self, match_id: int) -> str:
+        token = uuid.uuid4().hex[:8]
+        return f"https://meet.jit.si/dating-{match_id}-{token}"
 
     async def _fetchone(self, db: aiosqlite.Connection, query: str, params: tuple) -> aiosqlite.Row | None:
         async with db.execute(query, params) as cursor:

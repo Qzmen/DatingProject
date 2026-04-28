@@ -46,7 +46,8 @@ CREATE TABLE IF NOT EXISTS matches (
     user2_feedback INTEGER,
     call_requested_by INTEGER,
     user1_call_accepted INTEGER NOT NULL DEFAULT 0,
-    user2_call_accepted INTEGER NOT NULL DEFAULT 0
+    user2_call_accepted INTEGER NOT NULL DEFAULT 0,
+    call_room_url TEXT
 );
 
 CREATE TABLE IF NOT EXISTS feedback (
@@ -88,3 +89,5 @@ async def _ensure_match_columns(db: aiosqlite.Connection) -> None:
         await db.execute("ALTER TABLE matches ADD COLUMN user1_call_accepted INTEGER NOT NULL DEFAULT 0")
     if "user2_call_accepted" not in cols:
         await db.execute("ALTER TABLE matches ADD COLUMN user2_call_accepted INTEGER NOT NULL DEFAULT 0")
+    if "call_room_url" not in cols:
+        await db.execute("ALTER TABLE matches ADD COLUMN call_room_url TEXT")

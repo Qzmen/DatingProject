@@ -43,7 +43,8 @@ CREATE TABLE IF NOT EXISTS matches (
     user2_feedback INTEGER,
     call_requested_by INTEGER,
     user1_call_accepted INTEGER NOT NULL DEFAULT 0,
-    user2_call_accepted INTEGER NOT NULL DEFAULT 0
+    user2_call_accepted INTEGER NOT NULL DEFAULT 0,
+    call_room_url TEXT
 );
 
 CREATE TABLE IF NOT EXISTS feedback (

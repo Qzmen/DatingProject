@@ -160,10 +160,15 @@ async def _respond_call(message: Message, accepted: bool) -> None:
         return
 
     if match_fresh["status"] == "pending_confirm":
+        call_link = match_fresh.get("call_room_url")
         for user in users:
+            text = "Звонок согласован ✅\nТеперь можно зайти в конференцию по ссылке ниже."
+            if call_link:
+                text += f"\n\n🔗 {call_link}"
+            text += "\n\nПосле звонка предложи офлайн-встречу кнопкой ниже."
             await message.bot.send_message(
                 user["tg_id"],
-                "Звонок согласован ✅\nТеперь можно предложить офлайн-встречу.",
+                text,
                 reply_markup=meeting_decision_keyboard(),
             )
         return
