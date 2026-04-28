@@ -1,13 +1,29 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+import json
+import logging
+from urllib import error, request
+
 import aiosqlite
+
+logger = logging.getLogger(__name__)
 
 
 class MeetingService:
-    def __init__(self, db_path: str, meeting_price_stars: int) -> None:
+    def __init__(
+        self,
+        db_path: str,
+        meeting_price_stars: int,
+        yandex_telemost_oauth_token: str = "",
+        yandex_telemost_enabled: bool = False,
+        use_jitsi: bool = False,
+    ) -> None:
         self.db_path = db_path
         self.meeting_price_stars = meeting_price_stars
+        self.yandex_telemost_oauth_token = yandex_telemost_oauth_token
+        self.yandex_telemost_enabled = yandex_telemost_enabled
+        self.use_jitsi = use_jitsi
 
     async def get_match(self, match_id: int) -> dict | None:
         async with aiosqlite.connect(self.db_path) as db:
@@ -336,7 +352,14 @@ class MeetingService:
             )
             if refreshed and refreshed["user1_call_accepted"] and refreshed["user2_call_accepted"]:
                 confirm_deadline = (datetime.now(UTC) + timedelta(hours=24)).isoformat()
-                call_room_url = self._build_call_link(match_id)
+                call_room_url = await self._create_conference_url(match_id)
+                if not call_room_url:
+                    await db.execute(
+                        "UPDATE matches SET user1_call_accepted = 0, user2_call_accepted = 0, call_requested_by = NULL WHERE id = ?",
+                        (match_id,),
+                    )
+                    await db.commit()
+                    return False, "Не удалось создать ссылку на звонок. Попробуйте позже."
                 await db.execute(
                     "UPDATE matches SET status = 'pending_confirm', confirm_deadline = ?, call_room_url = ? WHERE id = ?",
                     (confirm_deadline, call_room_url, match_id),
@@ -408,9 +431,48 @@ class MeetingService:
             )
             return dict(row) if row else None
 
-    def _build_call_link(self, match_id: int) -> str:
-        # Обычная открытая комната без обязательного модератора/токенов
-        return f"https://telemost.yandex.ru/j/{match_id}"
+    async def _create_conference_url(self, match_id: int) -> str | None:
+        if self.use_jitsi:
+            logger.error("USE_JITSI=true is unsupported by current requirements")
+            return None
+        if not self.yandex_telemost_enabled:
+            logger.error("Yandex Telemost integration is disabled")
+            return None
+        if not self.yandex_telemost_oauth_token:
+            logger.error("YANDEX_TELEMOST_OAUTH_TOKEN is missing")
+            return None
+        return await self._create_yandex_telemost_conference(match_id)
+
+    async def _create_yandex_telemost_conference(self, match_id: int) -> str | None:
+        api_url = "https://cloud-api.yandex.net/v1/telemost-api/conferences"
+        payload = {"title": f"Dating call #{match_id}"}
+        headers = {
+            "Authorization": f"OAuth {self.yandex_telemost_oauth_token}",
+            "Content-Type": "application/json",
+        }
+        req = request.Request(api_url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
+        try:
+            with request.urlopen(req, timeout=15) as resp:  # noqa: S310
+                raw = resp.read().decode("utf-8")
+            data = json.loads(raw) if raw else {}
+        except (error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+            logger.exception("Failed to create Telemost conference: %s", exc)
+            return None
+
+        for key in ("conference_url", "join_url", "url", "link"):
+            value = data.get(key)
+            if isinstance(value, str) and value:
+                return value
+
+        conference_obj = data.get("conference")
+        if isinstance(conference_obj, dict):
+            for key in ("conference_url", "join_url", "url", "link"):
+                value = conference_obj.get(key)
+                if isinstance(value, str) and value:
+                    return value
+
+        logger.error("Telemost API response has no usable conference link: %s", data)
+        return None
 
     async def _fetchone(self, db: aiosqlite.Connection, query: str, params: tuple) -> aiosqlite.Row | None:
         async with db.execute(query, params) as cursor:

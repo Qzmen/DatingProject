@@ -16,7 +16,13 @@ async def run_bot(settings: Settings) -> None:
 
     user_service = UserService(settings.database_url, settings.default_stars_balance)
     matching_service = MatchingService(settings.database_url)
-    meeting_service = MeetingService(settings.database_url, settings.meeting_price_stars)
+    meeting_service = MeetingService(
+        settings.database_url,
+        settings.meeting_price_stars,
+        yandex_telemost_oauth_token=settings.yandex_telemost_oauth_token,
+        yandex_telemost_enabled=settings.yandex_telemost_enabled,
+        use_jitsi=settings.use_jitsi,
+    )
 
     bot.settings = settings
     bot.user_service = user_service
