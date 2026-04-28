@@ -410,7 +410,7 @@ class MeetingService:
 
     def _build_call_link(self, match_id: int) -> str:
         # Обычная открытая комната без обязательного модератора/токенов
-        return f"https://meet.jit.si/dating-room-{match_id}"
+        return f"https://telemost.yandex.ru/j/{match_id}"
 
     async def _fetchone(self, db: aiosqlite.Connection, query: str, params: tuple) -> aiosqlite.Row | None:
         async with db.execute(query, params) as cursor:
