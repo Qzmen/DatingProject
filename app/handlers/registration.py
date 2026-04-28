@@ -194,7 +194,7 @@ async def show_mutual_matches(message: Message) -> None:
     lines = ["🤝 Взаимные лайки:"]
     buttons: list[list[KeyboardButton]] = []
     for item in items[:8]:
-        lines.append(f"#{item['id']} • {item['partner_name']} • статус: {item['status']}")
+        lines.append(f"#{item['id']} • {item['partner_name']} • статус: {_pretty_status(item['status'])}")
         buttons.append([KeyboardButton(text=f"📞 Позвонить #{item['id']}")])
 
     buttons.append([KeyboardButton(text=MAIN_MENU_HOME)])
@@ -256,3 +256,14 @@ def _format_reputation(score: int, count: int) -> str:
     value = max(0.0, min(5.0, value))
     suffix = "оценка" if count == 1 else "оценок"
     return f"⭐ {value:.1f} ({count} {suffix})"
+
+
+def _pretty_status(status: str) -> str:
+    mapping = {
+        "mutual_like": "взаимный лайк",
+        "pending_call": "ожидает звонка",
+        "call_cancelled": "звонок отклонён",
+        "pending_confirm": "ожидает подтверждения партнёра",
+        "partner_shared": "партнёр подтверждён",
+    }
+    return mapping.get(status, status)

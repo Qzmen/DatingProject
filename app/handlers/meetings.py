@@ -8,6 +8,7 @@ from app.keyboards import (
     ATTENDANCE_YES,
     CALL_ACCEPT,
     CALL_REJECT,
+    call_response_keyboard,
     CALL_REQUEST,
     MEETING_CONFIRM,
     MEETING_REJECT,
@@ -48,7 +49,11 @@ async def request_call(message: Message) -> None:
     if users:
         for user in users:
             if user["id"] != me["id"]:
-                await message.bot.send_message(user["tg_id"], "Тебе отправили запрос на звонок 📞")
+                await message.bot.send_message(
+                    user["tg_id"],
+                    "Тебе отправили запрос на звонок 📞\nНажми кнопку ниже: принять или отклонить.",
+                    reply_markup=call_response_keyboard(),
+                )
 
 
 @router.message(F.text == CALL_ACCEPT)
