@@ -28,7 +28,7 @@ async def scheduler_loop(bot: Bot, meeting_service: MeetingService) -> None:
                     await bot.send_message(
                         user["tg_id"],
                         "Напоминание за 2-3 часа: ты точно идёшь на встречу?",
-                        reply_markup=precheck_keyboard(match["id"]),
+                        reply_markup=precheck_keyboard(),
                     )
 
             cancelled = await meeting_service.cancel_precheck_timeouts()
@@ -47,7 +47,7 @@ async def scheduler_loop(bot: Bot, meeting_service: MeetingService) -> None:
                     await bot.send_message(
                         user["tg_id"],
                         "Человек пришёл на встречу?",
-                        reply_markup=attendance_keyboard(match["id"]),
+                        reply_markup=attendance_keyboard(),
                     )
         except Exception:  # noqa: BLE001
             logger.exception("Scheduler iteration failed")
